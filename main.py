@@ -12,18 +12,26 @@
 #
 #    You should have received a copy of the GNU General Public License along with this program; 
 #    if not, see <http://www.gnu.org/licenses/>.
-
-
-
+#
+# This script manages the IPC and checks that all files and modules are available.
+# 
+#
 
 from multiprocessing import Process, Pipe, Manager, Lock, Event
 import dvbtgui
 import ffmpeg
 import backend
+import create_opencl_files
 import os, tempfile, sys
 
 if __name__ == '__main__':
+    # create all the opencl files if neccessary
+    file_creator = create_opencl_files.file_creator()
+
+    # IPC manager
     manager = Manager()
+
+    # create a shared namespace for all processes
     Settings = manager.Namespace()
     
     tmpdir = tempfile.mkdtemp()
