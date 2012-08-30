@@ -45,6 +45,12 @@ class file_creator():
             self.create_mapper(f,2,1704)
             self.create_mapper(f,3,1704)
             f.close()
+        if not os.path.isfile("signal_constellation.cl"):
+            print "signal_constellation.cl doesn't exist ! creating file ..."
+            f = open('signal_constellation.cl', 'w')
+            f.write(copyright)
+            self.create_signal_constellation(f)
+            f.close()
     
     # input: file descriptor, 0-3, usefulcarriers
     def create_mapper(self, f, symbol_index, usefulcarriers):
@@ -58,7 +64,7 @@ class file_creator():
             self.p += 1
             self.scatteredpilots.append(self.k)
         self.p = 0
-        f.write("__kernel void map_symbols%d_%d( __global uint *in,  __global uint *out)\n" % (symbol_index,usefulcarriers))
+        f.write("__kernel void map_symbols%d_%d( __global float2 *in,  __global float2 *out)\n" % (symbol_index,usefulcarriers))
         f.write("{\n")
         
         for i in range(0, usefulcarriers):
@@ -134,7 +140,7 @@ class file_creator():
 
         while cnt < 8:
             #f.write( "/* %d */\n" % cnt)
-            f.write("\trs_shift_reg[0] ^= ((uint64_t)(b & 0x01)* 0x%016xULL);\n" % a )
+            f.write("\trs_shift_reg[0] ^= ((long)(b & 0x01)* 0x%016xULL);\n" % a )
     
             rega = 0
             if ((a>>56) & 0x80) > 0:
@@ -167,7 +173,7 @@ class file_creator():
         a = a_init_2
         while cnt < 8:
             #f.write("/* %d */\n" % cnt)
-            f.write("\trs_shift_reg[1] ^= ((uint64_t)(b & 0x01)* 0x%016xULL);\n" % a )
+            f.write("\trs_shift_reg[1] ^= ((long)(b & 0x01)* 0x%016xULL);\n" % a )
     
             rega = 0
             if ((a>>56) & 0x80) > 0:
@@ -243,6 +249,28 @@ class file_creator():
         for i in range(0,17):
 	    f.write("workingreg[%d] = 0;\n" % (47+i))
         f.write("\n")
+
+    def create_signal_constellation(self, f):
+        f.write("/* use lookup-table instead ??? */\n")
+        f.write("__kernel void qpsk( __global uint *in, __global float2 *out)\n{\nint i = get_global_id(0) * 4;\nfloat2 tmp;\n")
+        for i in range(0,4):
+            f.write("tmp.x = 1.0f;\ntmp.y = 1.0f;\ntmp.x = ((in[i] & 0x00000001)>>%d) * -1.0f;\ntmp.y = ((in[i] & 0x00000002)>>%d) * -1.0f;\nout[i+%d] = tmp;\n\n" % (i*8,i*8+1,i))
+        f.write("}\n\n")
+        f.write("__kernel void qam_16( __global uint *in, __global float2 *out)\n{\nint i = get_global_id(0) * 4;\nfloat2 tmp;\n")
+        for i in range(0,4):
+            f.write("tmp.x = 3.0f;\ntmp.y = 3.0f;\ntmp.x -= ((in[i] & 0x00000004)>>%d) * 2.0f;\n" % (i*8+2))
+            f.write("tmp.y -= ((in[i] & 0x00000008)>>%d) * 2.0f;\ntmp.x *= -((in[i] & 0x00000001)>>%d);\ntmp.y *= -((in[i] & 0x00000002)>>%d);\n\n" % (i*8+3,i*8,i*8+1))
+        f.write("}\n\n")
+        f.write("__kernel void qam_64( __global uint *in, __global float2 *out)\n{\nint i = get_global_id(0) * 4;\nfloat2 tmp;\n")
+        for i in range(0,4):
+            f.write("tmp.x = 3.0f -((in[i] & 0x00000010)>>%d) * 2.0f;\ntmp.y = 3.0f -((in[i] & 0x00000020)>>%d) * 2.0f;\n" % (i*8+4,i*8+5))
+            f.write("tmp.x *= -((in[i] & 0x00000004)>>%d);\ntmp.y *= -((in[i] & 0x00000008)>>%d);\n" % (i*8+2,i*8+3))
+            f.write("tmp.x += 4.0f;\ntmp.y += 4.0f;\n") 
+            f.write("tmp.x *= -((in[i] & 0x00000001)>>%d);\ntmp.y *= -((in[i] & 0x00000002)>>%d);\n\n" % (i*8+0,i*8+1))
+        f.write("}\n\n")
+
+
+
 
 if __name__ == '__main__':
     create_files = file_creator()

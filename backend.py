@@ -18,6 +18,7 @@ import numpy
 import outer_coding
 import time
 import threading
+import mapper
 
 class OpenCL:
     def __init__(self,globalsettings,eventstart,eventstop,lock):
@@ -69,7 +70,9 @@ class OpenCL:
 
         # create the outer encoder
 	self.oc = outer_coding.encoder(self.ctx,self.queue,self.cl_thread_lock)
-
+   
+        # create the ofdm symbol mapper
+        self.symbolmapper = mapper.mapper(globalsettings, self.ctx, self.queue, self.cl_thread_lock)
 
     #cl.enqueue_write_buffer(self.queue, newbuf, data_to_encode)
     def thread_input_from_fifo(self):
@@ -115,6 +118,10 @@ class OpenCL:
             #if len(self.queue_ic_input) > 0: 
 	        #self.queue_ic_input.append(self.oc.encode(opencl_buffer))
                 #self.debugprint("data is here")
+
+
+            # map 6008 complex data values onto one ofdm symbol
+            #self.symbolmapper.map_symbols(inputbuffer,destbuffer)
 
             #self.oc.encode(self.tspacket)
 	    #self.queue.finish()
