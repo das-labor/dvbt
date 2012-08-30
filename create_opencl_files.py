@@ -64,6 +64,8 @@ class file_creator():
             self.p += 1
             self.scatteredpilots.append(self.k)
         self.p = 0
+        f.write("/* this maps the v-bit data words onto the fft input buffer among with the pilots */\n")
+        f.write("/* input is usfulcarriers * float2, output is odfmcarriers * float2 */\n")
         f.write("__kernel void map_symbols%d_%d( __global float2 *in,  __global float2 *out)\n" % (symbol_index,usefulcarriers))
         f.write("{\n")
         
@@ -87,6 +89,7 @@ class file_creator():
         out_cnt = 0
         pointer = 0
 
+        f.write("/* interleave the 204 bytes packet */\n")
         f.write("dimN = pbrs_index*51;\n")
         while out_cnt < 204:
             if len(in_a):
@@ -134,6 +137,8 @@ class file_creator():
         f.write("rs_shift_reg[2] = 0;\n")
         f.write("rs_shift_reg[3] = 0;\n\no = 0;\n")
         f.write("/* do a rs(255,236,8) reed-solomon encoding */\n")
+        f.write("/* this function takes 64 uints ( 255 bytes ) */\n")
+        f.write("/* it generates 16 error correcting bytes */\n")
         f.write(" for(i = 0; i < 255; i++)\n{\n")
         f.write("\tb = (workingreg[i / 4]>>((i%4)*8))&0x000000ff;\n")
         f.write("\tb ^= o;\n") 
@@ -228,6 +233,10 @@ class file_creator():
                 pbrs<<=1
             pbrsarray.append(shiftout)
 
+        f.write("/* this function takes a uint ( 4-bytes) and xors it with the output of the pbrs */\n")
+        f.write("/* the first byte of one packet is a sync byte ( 0xb8 or 0x47 ) and is not xor'd */\n")
+        f.write("/* the pbrs is reinitialized on every 8th packet (after 1504 bytes) */\n")
+
         f.write("switch(pbrs_index)\n{\n")
         for j in range(0,8):
             for i in range(0,47):
@@ -252,6 +261,10 @@ class file_creator():
 
     def create_signal_constellation(self, f):
         f.write("/* use lookup-table instead ??? */\n")
+        f.write("/* this function takes a uint ( 4-bytes) and threads each byte as one v-bit word */\n")
+        f.write("/* where v is 2 for qpsk, 4 for 16-qam and 6 for 64-qam */\n")
+        f.write("/* for every uint 4 float2 are generated (a complex number) */\n")
+
         f.write("__kernel void qpsk( __global uint *in, __global float2 *out)\n{\nint i = get_global_id(0) * 4;\nfloat2 tmp;\n")
         for i in range(0,4):
             f.write("tmp.x = 1.0f;\ntmp.y = 1.0f;\ntmp.x = ((in[i] & 0x00000001)>>%d) * -1.0f;\ntmp.y = ((in[i] & 0x00000002)>>%d) * -1.0f;\nout[i+%d] = tmp;\n\n" % (i*8,i*8+1,i))
