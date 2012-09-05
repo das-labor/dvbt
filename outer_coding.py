@@ -18,7 +18,7 @@ import numpy
 import clfifo
 
 class encoder():
-    def __init__(self, ctx, queue, thread_lock):
+    def __init__(self, ctx, queue, thread_lock, in_fifo, out_fifo):
         mf = cl.mem_flags
 
         #read in the OpenCL source file as a string
@@ -40,21 +40,25 @@ class encoder():
         self.cl_thread_lock = thread_lock
 
         # opencl buffer holding the computed data
-        self.dest_buf = cl.Buffer(self.ctx, cl.mem_flags.READ_WRITE, 204*8)
+        self.dest_buf = cl.Buffer(self.ctx, cl.mem_flags.READ_WRITE, 204*8*4)
 
         # opencl buffer holding the input data
-        self.src_buf = cl.Buffer(self.ctx, cl.mem_flags.READ_WRITE, 188*8)
+        self.src_buf = cl.Buffer(self.ctx, cl.mem_flags.READ_WRITE, 188*8*4)
 
-    def encode(self, src_fifo, dest_fifo):
+        # opencl fifo
+        self.inputfifo = in_fifo
+
+        # opencl fifo
+        self.outputfifo = out_fifo
+
+    def encode(self):
         # copy data from fifo
-        src_fifo.pop(self.src_buf,188*8)
+        self.inputfifo.pop(self.src_buf,188*8)
         self.cl_thread_lock.acquire()
         #self.program.run(self.queue, (8,), None, src_buf, dest_buf)
-        self.kernel1.set_args( src_buf, dest_buf)
+        self.kernel1.set_args(self.src_buf, self.dest_buf)
         cl.enqueue_nd_range_kernel(self.queue,self.kernel1,(8,),None )
         self.cl_thread_lock.release()
         # write data to fifo
-        dest_fifo.append(self.dest_buf,204*8)
-
-	return dest_buf
+        self.outputfifo.append(self.dest_buf,204*8)
 
