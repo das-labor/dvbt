@@ -145,7 +145,7 @@ class file_creator():
 
         while cnt < 8:
             #f.write( "/* %d */\n" % cnt)
-            f.write("\trs_shift_reg[0] ^= ((long)(b & 0x01)* 0x%016xULL);\n" % a )
+            f.write("\trs_shift_reg[0] ^= ((long)(b & 0x01)* 0x%016xUL);\n" % a )
     
             rega = 0
             if ((a>>56) & 0x80) > 0:
@@ -178,7 +178,7 @@ class file_creator():
         a = a_init_2
         while cnt < 8:
             #f.write("/* %d */\n" % cnt)
-            f.write("\trs_shift_reg[1] ^= ((long)(b & 0x01)* 0x%016xULL);\n" % a )
+            f.write("\trs_shift_reg[1] ^= ((long)(b & 0x01)* 0x%016xUL);\n" % a )
     
             rega = 0
             if ((a>>56) & 0x80) > 0:
@@ -205,18 +205,18 @@ class file_creator():
             f.write("\tb >>= 1;\n")
             cnt += 1
 
-        f.write("\to = (rs_shift_reg[3]&0xff00000000000000ULL)>>56;\n") 
-        f.write("\tp = (rs_shift_reg[2]&0xff00000000000000ULL)>>56;\n") 
+        f.write("\to = (rs_shift_reg[3]&0xff00000000000000UL)>>56;\n") 
+        f.write("\tp = (rs_shift_reg[2]&0xff00000000000000UL)>>56;\n") 
         f.write("\trs_shift_reg[2] <<= 8;\n") 
         f.write("\trs_shift_reg[3] <<= 8;\n") 
         f.write("\trs_shift_reg[3] |= p;\n") 
         f.write("\trs_shift_reg[2] ^= rs_shift_reg[0];\n") 
         f.write("\trs_shift_reg[3] ^= rs_shift_reg[1];\n}\n\n") 
         f.write("/* convert back to uint32 */\n") 
-        f.write("workingreg[47] = (rs_shift_reg[2]&0x00000000ffffffffULL);\n") 
-        f.write("workingreg[48] = (rs_shift_reg[2]&0xffffffff00000000ULL)>>32;\n") 
-        f.write("workingreg[49] = (rs_shift_reg[3]&0x00000000ffffffffULL);\n") 
-        f.write("workingreg[50] = (rs_shift_reg[3]&0xffffffff00000000ULL)>>32;\n\n") 
+        f.write("workingreg[47] = (rs_shift_reg[2]&0x00000000ffffffffUL);\n") 
+        f.write("workingreg[48] = (rs_shift_reg[2]&0xffffffff00000000UL)>>32;\n") 
+        f.write("workingreg[49] = (rs_shift_reg[3]&0x00000000ffffffffUL);\n") 
+        f.write("workingreg[50] = (rs_shift_reg[3]&0xffffffff00000000UL)>>32;\n\n") 
 
     def create_pbrs(self, f):
         j = 0
