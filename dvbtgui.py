@@ -237,13 +237,16 @@ class MainPanel(wx.Panel):
         self.globalsettings.ofdmsymbollength = self.globalsettings.ofdmsymbollengthuseful + self.globalsettings.ofdmguardintervallength
         self.globalsettings.ofdmsymbolspersecond = self.globalsettings.symbolrate / self.globalsettings.odfmmode /  (1 + self.globalsettings.guardinterval)
         self.globalsettings.ofdmframespersecond = self.globalsettings.ofdmsymbolspersecond / 68
-        self.globalsettings.usablebitrate = self.globalsettings.ofdmsymbolspersecond * self.globalsettings.odfmuseablecarriers * self.globalsettings.modulation * self.globalsettings.coderate * 0.921182266
+        # round the usablebitrate reported to ffmpeg
+        self.globalsettings.usablebitrateperodfmsymbol = self.globalsettings.odfmuseablecarriers * self.globalsettings.modulation * self.globalsettings.coderate * 0.921182266
+        self.globalsettings.usablebitrate = self.globalsettings.ofdmsymbolspersecond * self.globalsettings.usablebitrateperodfmsymbol
         self.globalsettings.tspacketspersecond = self.globalsettings.usablebitrate / (8 * 188)
 
         self.logger.AppendText("New Settings:\n")
         self.logger.AppendText("OFDM symbols: %s/sec\n" % self.toUnits(self.globalsettings.ofdmsymbolspersecond))
         self.logger.AppendText("OFDM frames: %s/sec\n" % self.toUnits(self.globalsettings.ofdmframespersecond))
         self.logger.AppendText("Usable Bitrate: %sbit/sec\n" % self.toUnits(self.globalsettings.usablebitrate))
+        self.logger.AppendText("Usable Bitrate per OFDM Symbol: %sbit/sec\n" % self.toUnits(self.globalsettings.usablebitrateperodfmsymbol))
 
         self.logger.AppendText("Channel symbolRate: %sS/sec\n" % self.toUnits(self.globalsettings.symbolrate))
         self.logger.AppendText("OFDM useful symbol duration: %ss\n" % self.toUnits(self.globalsettings.ofdmsymbollengthuseful))
