@@ -41,30 +41,31 @@ class Fifo:
         self.thread_lock = threading.Lock()
 
     def append(self, data, size):
-        size *= self.type.itemsize
         while (self.space_left() < size):
             self.inputevent.clear()
             self.inputevent.wait()
 
+        size *= self.type.itemsize
         self.thread_lock.acquire()
-        
-        
+
         self.cl_thread_lock.acquire()
         cl.enqueue_copy(self.queue, self.cl_fifo_bufferA, data, byte_count=size, src_offset=0, dest_offset=self.fifo_buffer_length)
         self.fifo_buffer_length += size
         self.cl_thread_lock.release()
+
         self.outputevent.set()
         self.thread_lock.release()
 
     def pop(self,clbuffer, size):
-        size *= self.type.itemsize
         while (self.len() < size):
             self.outputevent.clear()
             self.outputevent.wait()
 
+        size *= self.type.itemsize
         self.thread_lock.acquire()
 
         self.cl_thread_lock.acquire()
+
         # read data from the beginning of the buffer
         cl.enqueue_copy(self.queue, clbuffer, self.cl_fifo_bufferA, byte_count=size, src_offset=0, dest_offset=0)
 
@@ -78,13 +79,14 @@ class Fifo:
             cl.enqueue_copy(self.queue, self.cl_fifo_bufferA, self.cl_fifo_bufferB, byte_count=self.fifo_buffer_length, src_offset=0, dest_offset=0)
 
         self.cl_thread_lock.release()
+
         self.inputevent.set()
         self.thread_lock.release()
 
     def len(self):
         self.thread_lock.acquire()
         if self.type.itemsize > 0:
-            ret_val = self.fifo_buffer_length 
+            ret_val = self.fifo_buffer_length / self.type.itemsize
         else:
             ret_val = 0
         self.thread_lock.release()
@@ -93,7 +95,7 @@ class Fifo:
     def space_left(self):
         self.thread_lock.acquire()
         if self.type.itemsize > 0:
-            ret_val = (self.fifo_buffer_size - self.fifo_buffer_length )
+            ret_val = (self.fifo_buffer_size - self.fifo_buffer_length ) / self.type.itemsize
         else:
             ret_val = 0
         self.thread_lock.release()
