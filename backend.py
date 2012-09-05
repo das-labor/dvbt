@@ -15,10 +15,14 @@
 
 import pyopencl as cl
 import numpy
+from pyfft.cl import Plan
+import pyopencl.array as cl_array
+
 import outer_coding
 import time
 import threading
 import mapper
+import clfifo
 
 class OpenCL:
     def __init__(self,globalsettings,eventstart,eventstop,lock):
@@ -28,26 +32,11 @@ class OpenCL:
         self.eventstop = eventstop
         self.globallock = lock
 
-        # create a delayed thread
-        self.thread_output_fifo = threading.Timer((1/30),self.output_to_fifo)
-
         # create a event for signaling data can be processed
         self.thread_event = threading.Event()
 
         # locks the opencl access
         self.cl_thread_lock = threading.Lock()
-
-        # locks the input queue
-        self.input_thread_lock = threading.Lock()
-
-        # holds a cl.Buffer already on the compute device
-        self.queue_input = []
-
-        # holds a cl.Buffer that has been outer encoded and is ready for inner coding
-        self.queue_ic_input = []
-
-        # holds a cl.Buffer that has the final output data
-        self.queue_output = []
 
         # open the input fifo
         self.fd = open(globalsettings.ffmpegfifo, 'r+')
@@ -74,23 +63,47 @@ class OpenCL:
         # create the ofdm symbol mapper
         self.symbolmapper = mapper.mapper(globalsettings, self.ctx, self.queue, self.cl_thread_lock)
 
-    #cl.enqueue_write_buffer(self.queue, newbuf, data_to_encode)
+        # create a fft plan
+        self.fftplan = Plan((16, 16), queue=self.queue)
+
+        # opencl buffer holding data for the ifft - including pilots # 8k or 2k size ???
+        self.fftbuffer = cl.Buffer(self.ctx , cl.mem_flags.READ_WRITE, size=(self.globalsettings.odfmcarriers*8))
+
+        # opencl buffer holding the ofdm symbol data - no pilots are stored yet
+        self.ofdmsymbolbuffer = cl.Buffer(self.ctx , cl.mem_flags.READ_WRITE, size=(self.globalsettings.odfmuseablecarriers*8))
+
+        # opencl buffer holding the time domain data, Tu + Tg
+        self.timedomainbuffer = cl.Buffer(self.ctx , cl.mem_flags.READ_WRITE, size=(self.globalsettings.odfmuseablecarriers*8*(1+self.guardinterval)))
+
+        # opencl fifo 1
+        cfifo1 = clfifo.Fifo(self.ctx, self.queue, self.cl_thread_lock, numpy.dtype(numpy.uint32), 4*128*188)
+
+        # opencl fifo 2
+        cfifo2 = clfifo.Fifo(self.ctx, self.queue, self.cl_thread_lock, numpy.dtype(numpy.uint32), 4*128*204)
+
+        # opencl fifo 3
+        cfifo3 = clfifo.Fifo(self.ctx, self.queue, self.cl_thread_lock, numpy.dtype(numpy.uint32), 4*128*204*2)
+
+        # opencl fifo 4
+        cfifo4 = clfifo.Fifo(self.ctx, self.queue, self.cl_thread_lock, numpy.dtype(numpy.uint32), 4*128*204*2)
+
+        # opencl fifo 5
+        cfifo5 = clfifo.Fifo(self.ctx, self.queue, self.cl_thread_lock, numpy.dtype(numpy.uint32), 4*128*204*2)
+
     def thread_input_from_fifo(self):
+        dest_buf = cl.Buffer(self.ctx , cl.mem_flags.READ_ONLY, size=188*8)
         while self.eventstop.is_set() == False:
             tspacket = self.fd.read(188*8)
             if len(tspacket) == 0:
                 break
-            data_to_encode = numpy.fromstring(tspacket, dtype=numpy.uint32)
-            newbuf = cl.Buffer(self.ctx , cl.mem_flags.READ_ONLY, size=188*8)
-
+            data = numpy.fromstring(tspacket, dtype=numpy.uint32)
+            
             self.cl_thread_lock.acquire()
-            cl.enqueue_copy(self.queue, newbuf, data_to_encode)
+            cl.enqueue_copy(self.queue, dest_buf, data)
             self.cl_thread_lock.release()
 
-            # make sure only one thread access this data at time
-            self.input_thread_lock.acquire()
-            self.queue_input.append(newbuf)
-            self.input_thread_lock.release()
+            # no need to lock the fifo
+            cfifo1.append(dest_buf,188*8)
 
             # any thread can set this event to wake the main statemachine
             self.thread_event.set()
@@ -98,7 +111,6 @@ class OpenCL:
     def run(self):
         self.debugprint("Opencl backend alive!")
 
-        #self.thread_output_fifo.start()
         self.thread_input_fifo.start()
 
         while self.eventstop.is_set() == False:
@@ -106,34 +118,20 @@ class OpenCL:
             t = time.time()
 	    
             #check for new data available from pipe
-            self.input_thread_lock.acquire()
-            if len(self.queue_input) > 0:
-                self.debugprint("input queue size %d" % (len(self.queue_input) * 188*8))
-                opencl_buffer = self.queue_input.pop(0) 
-                self.queue_ic_input.append(self.oc.encode(opencl_buffer))
-
-            self.input_thread_lock.release()
-
-            #check for data in the inner coding queue
-            #if len(self.queue_ic_input) > 0: 
-	        #self.queue_ic_input.append(self.oc.encode(opencl_buffer))
-                #self.debugprint("data is here")
+            
+            if (cfifo1.len() >= 188*8) and (cfifo2.space_left() >= 204*8):
+                self.oc.encode(cfifo1,cfifo2)
 
 
-            # map 6008 complex data values onto one ofdm symbol
-            #self.symbolmapper.map_symbols(inputbuffer,destbuffer)
+            # map $activecarriers complex data values onto one ofdm symbol
+            #self.symbolmapper.map_symbols(self.ofdmsymbolbuffer,self.fftbuffer)
 
-            #self.oc.encode(self.tspacket)
-	    #self.queue.finish()
-            #self.lock.acquire()
-	    #print "c:" , c[0]
-	    #print "c:" , c[1]
-	    #print "c:" , c[2]
-	    #print "c:" , c[3]
-	    #print "c:" , c[4]
-	    #print "c:" , c[5]
-	    #print "c:" , c[6]
-	    #print "c:" , c[7]
+            # do an inverse FFT
+            #self.fftplan.execute(self.fftbuffer, inverse=True) #gpu_data.data
+
+            # start a thread for processing the final data
+            #threading.Timer((1/30),self.output_to_fifo).start()
+            
             self.debugprint( "%.9f sec/pass" % (time.time() - t))
             self.thread_event.clear()
             # TODO: how long to wait ?
@@ -145,6 +143,7 @@ class OpenCL:
     def cleanup(self):
         self.thread_output_fifo.cancel()
         self.thread_input_fifo.join()
+        self.fd.close()
 
     def debugprint(self, value):
         self.globallock.acquire()
@@ -152,13 +151,7 @@ class OpenCL:
         self.globallock.release()
 
     # TODO: all
-    def output_to_fifo(self):
-        self.output_queue_lock.acquire()
-
-        self.output_queue_lock.release()
-        #self.timer_output_to_fifo.start()
-
-
+    #def output_to_fifo(self):
 
 def startbackend(globalsettings,eventstart,eventstop,lock):
     backend = OpenCL(globalsettings,eventstart,eventstop,lock)
