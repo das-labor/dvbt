@@ -46,25 +46,42 @@ class OpenCL:
 
 	# create a opencl context
         try:
+           self.ctx = cl.create_some_context()
            for any_platform in cl.get_platforms():
               for found_device in any_platform.get_devices():
                  if found_device.name == globalsettings.computedevice:
 		    self.ctx = cl.Context(devices=[found_device])
                     break
         except ValueError:
-           self.ctx = cl.create_some_context()
+            print "ERROR %s" % ValueError
 
         # create a opencl command queue
         self.queue = cl.CommandQueue(self.ctx)
 
+        # opencl fifo 1, 128 * 188 * uint
+        self.cfifo1 = clfifo.Fifo(self.ctx, self.queue, self.cl_thread_lock, numpy.dtype(numpy.uint32), 4*128*188)
+
+        # opencl fifo 2, 128 * 204 * uint
+        self.cfifo2 = clfifo.Fifo(self.ctx, self.queue, self.cl_thread_lock, numpy.dtype(numpy.uint32), 4*128*204)
+
+        # opencl fifo 3, TODO
+        self.cfifo3 = clfifo.Fifo(self.ctx, self.queue, self.cl_thread_lock, numpy.dtype(numpy.uint32), 4*128*204*2)
+
+        # opencl fifo 4, TODO
+        self.cfifo4 = clfifo.Fifo(self.ctx, self.queue, self.cl_thread_lock, numpy.dtype(numpy.uint32), 4*128*204*2)
+
+        # opencl fifo 5, TODO
+        self.cfifo5 = clfifo.Fifo(self.ctx, self.queue, self.cl_thread_lock, numpy.dtype(numpy.uint32), 4*128*204*2)
+
+        print "compiling kernels, this may take a while\nTODO: precompile binaries"
         # create the outer encoder
-	self.oc = outer_coding.encoder(self.ctx,self.queue,self.cl_thread_lock)
-   
+	self.oc = outer_coding.encoder(self.ctx,self.queue,self.cl_thread_lock, self.cfifo1, self.cfifo2)
+
         # create the ofdm symbol mapper
-        self.symbolmapper = mapper.mapper(globalsettings, self.ctx, self.queue, self.cl_thread_lock)
+        #self.symbolmapper = mapper.mapper(globalsettings, self.ctx, self.queue, self.cl_thread_lock)
 
         # create a fft plan
-        self.fftplan = Plan((16, 16), queue=self.queue)
+        #self.fftplan = Plan((16, 16), queue=self.queue)
 
         # opencl buffer holding data for the ifft - including pilots # 8k or 2k size ???
         self.fftbuffer = cl.Buffer(self.ctx , cl.mem_flags.READ_WRITE, size=(self.globalsettings.odfmcarriers*8))
@@ -73,25 +90,11 @@ class OpenCL:
         self.ofdmsymbolbuffer = cl.Buffer(self.ctx , cl.mem_flags.READ_WRITE, size=(self.globalsettings.odfmuseablecarriers*8))
 
         # opencl buffer holding the time domain data, Tu + Tg
-        self.timedomainbuffer = cl.Buffer(self.ctx , cl.mem_flags.READ_WRITE, size=(self.globalsettings.odfmuseablecarriers*8*(1+self.guardinterval)))
+        self.timedomainbuffer = cl.Buffer(self.ctx , cl.mem_flags.READ_WRITE, size=int(self.globalsettings.odfmuseablecarriers*8*(1+self.globalsettings.guardinterval)))
 
-        # opencl fifo 1
-        cfifo1 = clfifo.Fifo(self.ctx, self.queue, self.cl_thread_lock, numpy.dtype(numpy.uint32), 4*128*188)
-
-        # opencl fifo 2
-        cfifo2 = clfifo.Fifo(self.ctx, self.queue, self.cl_thread_lock, numpy.dtype(numpy.uint32), 4*128*204)
-
-        # opencl fifo 3
-        cfifo3 = clfifo.Fifo(self.ctx, self.queue, self.cl_thread_lock, numpy.dtype(numpy.uint32), 4*128*204*2)
-
-        # opencl fifo 4
-        cfifo4 = clfifo.Fifo(self.ctx, self.queue, self.cl_thread_lock, numpy.dtype(numpy.uint32), 4*128*204*2)
-
-        # opencl fifo 5
-        cfifo5 = clfifo.Fifo(self.ctx, self.queue, self.cl_thread_lock, numpy.dtype(numpy.uint32), 4*128*204*2)
 
     def thread_input_from_fifo(self):
-        dest_buf = cl.Buffer(self.ctx , cl.mem_flags.READ_ONLY, size=188*8)
+        dest_buf = cl.Buffer(self.ctx , cl.mem_flags.READ_ONLY, size=188*8*4)
         while self.eventstop.is_set() == False:
             tspacket = self.fd.read(188*8)
             if len(tspacket) == 0:
@@ -103,7 +106,7 @@ class OpenCL:
             self.cl_thread_lock.release()
 
             # no need to lock the fifo
-            cfifo1.append(dest_buf,188*8)
+            self.cfifo1.append(dest_buf,188*8)
 
             # any thread can set this event to wake the main statemachine
             self.thread_event.set()
@@ -119,8 +122,7 @@ class OpenCL:
 	    
             #check for new data available from pipe
             
-            if (cfifo1.len() >= 188*8) and (cfifo2.space_left() >= 204*8):
-                self.oc.encode(cfifo1,cfifo2)
+            self.oc.encode()
 
 
             # map $activecarriers complex data values onto one ofdm symbol
