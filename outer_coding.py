@@ -15,37 +15,46 @@
 
 import pyopencl as cl
 import numpy
+import clfifo
 
 class encoder():
     def __init__(self, ctx, queue, thread_lock):
         mf = cl.mem_flags
+
         #read in the OpenCL source file as a string
         self.f = open('outer_coding.cl', 'r')
         fstr = "".join(self.f.readlines())
         self.program = cl.Program(ctx, fstr).build()
+        self.f.close()
+
         #create the opencl kernel
         self.kernel1 = cl.Kernel(self.program,"run")
+
 	# save the opencl queue
 	self.queue = queue
+
 	# save the opencl context
 	self.ctx = ctx
+
         # thread lock for opencl
-        self.thread_lock = thread_lock
-        #g = open('pbrs.bin', 'rb')
-        #self.pbrs = numpy.fromstring(g.read(188*8), dtype=numpy.uint32)
-        #self.pbrs_buf = cl.Buffer(self.ctx, mf.READ_ONLY | mf.COPY_HOST_PTR, hostbuf=self.pbrs)
+        self.cl_thread_lock = thread_lock
 
-    def encode(self, src_buf):
-        #init buffers
-        self.thread_lock.acquire()
-        dest_buf = cl.Buffer(self.ctx, cl.mem_flags.READ_WRITE, 204*8)
+        # opencl buffer holding the computed data
+        self.dest_buf = cl.Buffer(self.ctx, cl.mem_flags.READ_WRITE, 204*8)
 
+        # opencl buffer holding the input data
+        self.src_buf = cl.Buffer(self.ctx, cl.mem_flags.READ_WRITE, 188*8)
+
+    def encode(self, src_fifo, dest_fifo):
+        # copy data from fifo
+        src_fifo.pop(self.src_buf,188*8)
+        self.cl_thread_lock.acquire()
         #self.program.run(self.queue, (8,), None, src_buf, dest_buf)
         self.kernel1.set_args( src_buf, dest_buf)
         cl.enqueue_nd_range_kernel(self.queue,self.kernel1,(8,),None )
-        self.thread_lock.release()
-
-        #cl.enqueue_read_buffer(self.queue, self.dest_buf, c).wait()
+        self.cl_thread_lock.release()
+        # write data to fifo
+        dest_fifo.append(self.dest_buf,204*8)
 
 	return dest_buf
 
