@@ -51,7 +51,7 @@ class MainPanel(wx.Panel):
         self.editcellID = wx.TextCtrl(self, value="0", pos=(220, 60), size=(100,-1))
 
         # the combobox Control code rate
-        self.coderateList = ['1/2', '2/3', '3/4', '5/6', '7/8']
+        self.coderateList = ['1/2'] # TODO: ['2/3', '3/4', '5/6', '7/8']
         self.lblcoderate = wx.StaticText(self, label="Puncturing pattern", pos=(10, 90))
         self.editcoderate = wx.ComboBox(self, pos=(220, 90), size=(95, -1), choices=self.coderateList, style=wx.CB_READONLY, value="1/2")
         self.Bind(wx.EVT_COMBOBOX, self.EvtComboBoxcoderate, self.editcoderate)
