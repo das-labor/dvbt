@@ -87,8 +87,6 @@ class mapper():
 	self.queue = queue
 	# save the opencl context
 	self.ctx = ctx
-        # thread lock for opencl
-        self.thread_lock = thread_lock
 
         # init all the buffers and copy them to the compute device
         self.create_skeletons()
@@ -153,7 +151,7 @@ class mapper():
                  # generate a new symbol
                  self.create_symbol_skeleton(i,self.tps_pilots.get_next())
                  tmp = numpy.array(self.mappedsymbols, dtype=numpy.complex64)
-                 newbuf = cl.Buffer(self.ctx , cl.mem_flags.READ_ONLY, size=8*self.globalsettings.odfmuseablecarriers)
+                 newbuf = cl.Buffer(self.ctx , cl.mem_flags.READ_ONLY, size=8*self.globalsettings.odfmcarriers)
                  cl.enqueue_copy(self.queue, newbuf, tmp)
                  self.skeleton_opencl_buffers.append(newbuf)
 
@@ -162,7 +160,7 @@ class mapper():
         self.p = 0
         self.k = 0
         self.scatteredpilots = []
-        while self.k < self.globalsettings.usefulcarriers:
+        while self.k < self.globalsettings.odfmcarriers:
             self.k = 0 + 3 * (symbol_index % 4) + 12 * self.p
             self.p += 1
             self.scatteredpilots.append(self.k)
@@ -176,7 +174,7 @@ class mapper():
         self.pbrs = pbrs()
 
         # create the skeleton
-        for i in range(0,self.globalsettings.odfmuseablecarriers):
+        for i in range(0,self.globalsettings.odfmcarriers):
             # get the next wk
             self.wk = self.pbrs.get_next()
 
