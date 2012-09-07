@@ -51,6 +51,13 @@ class file_creator():
             f.write(copyright)
             self.create_signal_constellation(f)
             f.close()
+        if not os.path.isfile("inner_coder.cl"):
+            print "inner_coder.cl doesn't exist ! creating file ..."
+            f = open('inner_coder.cl', 'w')
+            f.write(copyright)
+            self.create_inner_coder(f)
+            f.close()
+
     
     # input: file descriptor, 0-3, usefulcarriers
     def create_mapper(self, f, symbol_index, usefulcarriers):
@@ -267,22 +274,24 @@ class file_creator():
 
         f.write("__kernel void qpsk( __global uint *in, __global float2 *out)\n{\nint i = get_global_id(0) * 4;\nfloat2 tmp;\n")
         for i in range(0,4):
-            f.write("tmp.x = 1.0f;\ntmp.y = 1.0f;\ntmp.x = ((in[i] & 0x00000001)>>%d) * -1.0f;\ntmp.y = ((in[i] & 0x00000002)>>%d) * -1.0f;\nout[i+%d] = tmp;\n\n" % (i*8,i*8+1,i))
+            f.write("tmp.x = 1.0f - ((in[i] & 0x00000001)>>%d) * 2.0f;\ntmp.y = 1.0f - ((in[i] & 0x00000002)>>%d) * 2.0f;\nout[i+%d] = tmp;\n\n" % (i*8,i*8+1,i))
         f.write("}\n\n")
         f.write("__kernel void qam_16( __global uint *in, __global float2 *out)\n{\nint i = get_global_id(0) * 4;\nfloat2 tmp;\n")
         for i in range(0,4):
-            f.write("tmp.x = 3.0f;\ntmp.y = 3.0f;\ntmp.x -= ((in[i] & 0x00000004)>>%d) * 2.0f;\n" % (i*8+2))
-            f.write("tmp.y -= ((in[i] & 0x00000008)>>%d) * 2.0f;\ntmp.x *= -((in[i] & 0x00000001)>>%d);\ntmp.y *= -((in[i] & 0x00000002)>>%d);\n\n" % (i*8+3,i*8,i*8+1))
+            f.write("tmp.x = 3.0f - ((in[i] & 0x00000004)>>%d) * 2.0f;\n" % (i*8+2))
+            f.write("tmp.y = 3.0f - ((in[i] & 0x00000008)>>%d) * 2.0f;\ntmp.x *= 1.0f-((in[i] & 0x00000001)>>%d) * 2.0f;\ntmp.y *= 1.0f -((in[i] & 0x00000002)>>%d) * 2.0f;\nout[i+%d] = tmp;\n" % (i*8+3,i*8,i*8+1,i))
         f.write("}\n\n")
         f.write("__kernel void qam_64( __global uint *in, __global float2 *out)\n{\nint i = get_global_id(0) * 4;\nfloat2 tmp;\n")
         for i in range(0,4):
             f.write("tmp.x = 3.0f -((in[i] & 0x00000010)>>%d) * 2.0f;\ntmp.y = 3.0f -((in[i] & 0x00000020)>>%d) * 2.0f;\n" % (i*8+4,i*8+5))
-            f.write("tmp.x *= -((in[i] & 0x00000004)>>%d);\ntmp.y *= -((in[i] & 0x00000008)>>%d);\n" % (i*8+2,i*8+3))
+            f.write("tmp.x *= 1.0f -((in[i] & 0x00000004)>>%d) * 2.0f;\ntmp.y *= 1.0f -((in[i] & 0x00000008)>>%d) * 2.0f;\n" % (i*8+2,i*8+3))
             f.write("tmp.x += 4.0f;\ntmp.y += 4.0f;\n") 
-            f.write("tmp.x *= -((in[i] & 0x00000001)>>%d);\ntmp.y *= -((in[i] & 0x00000002)>>%d);\n\n" % (i*8+0,i*8+1))
+            f.write("tmp.x *= 1.0f -((in[i] & 0x00000001)>>%d) * 2.0f;\ntmp.y *= 1.0f -((in[i] & 0x00000002)>>%d) * 2.0f;\n" % (i*8+0,i*8+1))
+            f.write("out[i+%d] = tmp;\n\n" % i)
         f.write("}\n\n")
 
-
+    def create_inner_coder(self, f):
+        print "TODO"
 
 
 if __name__ == '__main__':
