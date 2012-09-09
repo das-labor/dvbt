@@ -51,9 +51,9 @@ class file_creator():
             f.write(copyright)
             self.create_signal_constellation(f)
             f.close()
-        if not os.path.isfile("inner_coder.cl"):
-            print "inner_coder.cl doesn't exist ! creating file ..."
-            f = open('inner_coder.cl', 'w')
+        if not os.path.isfile("inner_coding.cl"):
+            print "inner_coding.cl doesn't exist ! creating file ..."
+            f = open('inner_coding.cl', 'w')
             f.write(copyright)
             self.create_inner_coder(f)
             f.close()
@@ -291,7 +291,169 @@ class file_creator():
         f.write("}\n\n")
 
     def create_inner_coder(self, f):
-        print "TODO"
+        coderatearray = ["1_2","3_4"]
+        modulation = ["qpsk","16qam","64qam"]
+        for cr in coderatearray:
+            if cr == "1_2":
+                crbitsx = [0]
+                crbitsy = [0]
+                outbits = 1
+            elif cr == "2_3":
+                crbitsx = [0]
+                crbitsy = [0,1]
+                outbits = 2
+            elif cr == "3_4":
+                crbitsx = [0,2]
+                crbitsy = [0,1]
+                outbits = 3
+            elif cr == "5_6":
+                crbitsx = [0,2,4]
+                crbitsy = [0,1,3]
+                outbits = 5
+            elif cr == "7_8":
+                crbitsx = [0,2,4,6]
+                crbitsy = [0,1,3,5]
+                outbits = 7
+
+            for i in range(0,len(modulation)):
+                md = modulation[i]
+                mdbits = (i+1)*2
+                infotext = "/* inner coder: folding code: %s, bitwise interleaving, %s signal mapping */\n" % (cr, md)
+                infotext += "/* use %d interleavers (%s mode) */\n" % (mdbits,md) 
+                infotext += "/* execute with 63 work group size. */\n"
+                infotext += "/* each workgroup processes %d*126 bit */\n" % i
+                infotext += "/* workgroup input 126 bit, output 126 float2 */\n"
+                infotext += "/* execute TODO workgroups at once: TODO uints in, 16*126 = 2016 float2 out */\n"
+                f.write(infotext)
+
+                #f.write("#define WORKGROUPSIZE 63\n")
+                f.write("__kernel void run_%s_%s( __global uint *in, __global float2 *out)\n" % (cr,md))
+                f.write("{\n")
+                f.write("\t__local uint interleaved_bits[%d][126];\n" % mdbits)
+                f.write("\tuint workingreg[2];\n")
+                f.write("\tuint resultreg[%d];\n\n" % mdbits)
+                f.write("\tfloat2 tmp;\n")
+                f.write("\tint i = get_global_id(0);\n")
+                f.write("\tint j = i*%d;\n\n" % ((i+1)*2))
+                for j in range(0,mdbits):
+                    f.write("\tresultreg[%d] = 0;\n" % j)
+                f.write("\tworkingreg[0] = 0;\n")
+                f.write("\tworkingreg[1] = 0;\n\n")
+                f.write("\t/* load bit from global memory */\n")
+                f.write("\tworkingreg[0] =in[(int)(j>>5)];\n")
+                f.write("\tworkingreg[1] =in[(int)(j>>5) +1];\n")
+                f.write("\tworkingreg[0] <<= (j&0x001f);\n")
+                f.write("\tworkingreg[0] |= workingreg[1]>>(32-(j&0x001f));\n\n")
+
+                f.write("\n\t/* inner coder & inner interleaver*/\n")
+                t = 0
+                for xx in range(0,2):
+                    j = 0
+                    while j < 2:
+                        if crbitsx.count(t) > 0:
+                            f.write("\t\t/* generate X */\n")
+                            f.write("\t\tresultreg[%d] = (workingreg[0] * 0x9E) & 0x80000000;\n" % j)
+                            f.write("\t\tresultreg[%d] >>= 31;\n" % j)
+                            j += 1
+                        if crbitsy.count(t) > 0:
+                            f.write("\t\t/* generate Y */\n")
+                            f.write("\t\tresultreg[%d] = (workingreg[0] * 0xDA) & 0x80000000;\n" % j)
+                            f.write("\t\tresultreg[%d] >>= 31;\n\n" % j)
+                            j += 1
+                        f.write("\t\tworkingreg[0] <<= 1;\n\n")
+                        t += 1
+                        t %= outbits
+                    f.write("\t\t/* interleaver 0, y = x + 0 mod 126 */\n")
+                    f.write("\t\tinterleaved_bits[0][j+%d] = resultreg[0];\n\n" % xx)
+                    f.write("\t\t/* interleaver 1, y = x + 63 mod 126 */\n")
+                    f.write("\t\tinterleaved_bits[1][((j+63+%d) %% 126)] = resultreg[1];\n\n" % xx)
+                    
+                    if i > 0:
+                        j = 0
+                        while j < 2:
+                            if crbitsx.count(t) > 0:
+                                f.write("\t\t/* generate X */\n")
+                                f.write("\t\tresultreg[%d] = (workingreg[0] * 0x9E) & 0x80000000;\n" % j)
+                                f.write("\t\tresultreg[%d] >>= 31;\n" % j)
+                                j += 1
+                            if crbitsy.count(t) > 0:
+                                f.write("\t\t/* generate Y */\n")
+                                f.write("\t\tresultreg[%d] = (workingreg[0] * 0xDA) & 0x80000000;\n" % j)
+                                f.write("\t\tresultreg[%d] >>= 31;\n\n" % j)
+                                j += 1
+                            f.write("\t\tworkingreg[0] <<= 1;\n\n")
+                            t += 1
+                            t %= outbits
+                        f.write("\t\t/* interleaver 2, y = x + 105 mod 126 */\n")
+                        f.write("\t\tinterleaved_bits[2][((j+105+%d) %% 126)] = resultreg[2];\n\n" % xx)
+                        f.write("\t\t/* interleaver 3, y = x + 42 mod 126 */\n")
+                        f.write("\t\tinterleaved_bits[3][((j+42+%d) %% 126)] = resultreg[3];\n\n" % xx)
+                        
+                    if i > 1:
+                        j = 0
+                        while j < 2:
+                            if crbitsx.count(t) > 0:
+                                f.write("\t\t/* generate X */\n")
+                                f.write("\t\tresultreg[%d] = (workingreg[0] * 0x9E) & 0x80000000;\n" % j)
+                                f.write("\t\tresultreg[%d] >>= 31;\n" % j)
+                                j += 1
+                            if crbitsy.count(t) > 0:
+                                f.write("\t\t/* generate Y */\n")
+                                f.write("\t\tresultreg[%d] = (workingreg[0] * 0xDA) & 0x80000000;\n" % j)
+                                f.write("\t\tresultreg[%d] >>= 31;\n\n" % j)
+                                j += 1
+                            f.write("\t\tworkingreg[0] <<= 1;\n\n")
+                            t += 1
+                            t %= outbits
+                        f.write("\t\t/* interleaver 4, y = x + 21 mod 126 */\n")
+                        f.write("\t\tinterleaved_bits[4][((j+21+%d) %% 126)] = resultreg[4];\n\n" % xx )
+                        f.write("\t\t/* interleaver 5, y = x + 84 mod 126 */\n")
+                        f.write("\t\tinterleaved_bits[5][((j+84+%d) %% 126)] = resultreg[5];\n\n" % xx)
+
+
+                f.write("\t/* interleaving has be done by inserting at the correct position */\n")
+                f.write("\n\t/* signal constellation mapping */\n")
+                f.write("\tbarrier(CLK_LOCAL_MEM_FENCE);\n")
+                f.write("\tj = get_local_id(0) *2;\n")
+                if i == 0:
+                    f.write("\ttmp.x = 1.0f - 2.0f * interleaved_bits[0][get_local_id(0)*2];\n")
+                    f.write("\ttmp.y = 1.0f - 2.0f * interleaved_bits[1][get_local_id(0)*2];\n")
+                    f.write("\tout[i] = tmp;\n")
+                    f.write("\ttmp.x = 1.0f - 2.0f * interleaved_bits[0][get_local_id(0)*2+1];\n")
+                    f.write("\ttmp.y = 1.0f - 2.0f * interleaved_bits[1][get_local_id(0)*2+1];\n")
+                    f.write("\tout[i+1] = tmp;\n")
+                elif i == 1:
+                    f.write("\ttmp.x = 3.0f - interleaved_bits[2][j] * 2.0f;\n")
+                    f.write("\ttmp.y = 3.0f - interleaved_bits[3][j] * 2.0f;\n")
+                    f.write("\ttmp.x *= 1.0f- interleaved_bits[0][j] * 2.0f;\n")
+                    f.write("\ttmp.y *= 1.0f - interleaved_bits[1][j] * 2.0f;\n")
+                    f.write("\tout[i] = tmp;\n")
+                    f.write("\ttmp.x = 3.0f - interleaved_bits[2][j+1] * 2.0f;\n")
+                    f.write("\ttmp.y = 3.0f - interleaved_bits[3][j+1] * 2.0f;\n")
+                    f.write("\ttmp.x *= 1.0f- interleaved_bits[0][j+1] * 2.0f;\n")
+                    f.write("\ttmp.y *= 1.0f - interleaved_bits[1][j+1] * 2.0f;\n")
+                    f.write("\tout[i+1] = tmp;\n")
+                elif i == 2:
+                    f.write("\ttmp.x = 3.0f - interleaved_bits[4][j] * 2.0f;\n")
+                    f.write("\ttmp.y = 3.0f - interleaved_bits[5][j] * 2.0f;\n")
+                    f.write("\ttmp.x *= 1.0f - interleaved_bits[2][j] * 2.0f;\n")
+                    f.write("\ttmp.y *= 1.0f - interleaved_bits[3][j] * 2.0f;\n")
+                    f.write("\ttmp.x += 4.0f;\n")
+                    f.write("\ttmp.y += 4.0f;\n")
+                    f.write("\ttmp.x *= 1.0f - interleaved_bits[0][j] * 2.0f;\n")
+                    f.write("\ttmp.y *= 1.0f - interleaved_bits[1][j] * 2.0f;\n")
+                    f.write("\tout[i] = tmp;\n")
+                    f.write("\ttmp.x = 3.0f - interleaved_bits[4][j+1] * 2.0f;\n")
+                    f.write("\ttmp.y = 3.0f - interleaved_bits[5][j+1] * 2.0f;\n")
+                    f.write("\ttmp.x *= 1.0f - interleaved_bits[2][j+1] * 2.0f;\n")
+                    f.write("\ttmp.y *= 1.0f - interleaved_bits[3][j+1] * 2.0f;\n")
+                    f.write("\ttmp.x += 4.0f;\n")
+                    f.write("\ttmp.y += 4.0f;\n")
+                    f.write("\ttmp.x *= 1.0f - interleaved_bits[0][j+1] * 2.0f;\n")
+                    f.write("\ttmp.y *= 1.0f - interleaved_bits[1][j+1] * 2.0f;\n")
+                    f.write("\tout[i+1] = tmp;\n")
+                f.write("}\n\n")
+
 
 
 if __name__ == '__main__':
