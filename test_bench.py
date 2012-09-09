@@ -34,7 +34,7 @@ class test_bench():
 
         # create a opencl command queue
         self.queue = cl.CommandQueue(self.ctx)
-
+        self.cd = computedevice
         # create a event
         self.thread_event = threading.Event()
 
@@ -43,6 +43,7 @@ class test_bench():
         print "Benchmark will run for %d seconds..." % duration
         
     def test_execution_time(self, index):
+        print "test_execution_time:"
         kernelname = []
         if index == 1:
             filename = "outer_coding.cl"
@@ -50,6 +51,7 @@ class test_bench():
             buffersize_in = 1504
             buffersize_out = 1632
             kernel_parallel_task = 8
+            kernel_workgroupsize = kernel_parallel_task
             # generate random bytes
             data_to_encode = numpy.fromstring(numpy.random.bytes(buffersize_in), dtype=numpy.uint32)
         elif index == 2:
@@ -65,17 +67,41 @@ class test_bench():
             buffersize_in = 6049*8 # 6817 * float2
             buffersize_out = 6817*8 # 6817 * float2
             kernel_parallel_task = 1
+            kernel_workgroupsize = kernel_parallel_task
             # generate random bytes
             data_to_encode = numpy.fromstring(numpy.random.bytes(buffersize_in), dtype=numpy.complex64)
-
+        elif index == 3:
+            filename = "signal_constellation2.cl"
+            kernelname.append("qpsk")
+            kernelname.append("qam_16")
+            kernelname.append("qam_64")
+            buffersize_in = 800*8/4 # 6049 * uint / 4
+            buffersize_out = 800*8 # 6049 * float2 
+            kernel_parallel_task = 800/4
+            kernel_workgroupsize = kernel_parallel_task
+            # generate random bytes
+            data_to_encode = numpy.fromstring(numpy.random.bytes(buffersize_in), dtype=numpy.uint32)
+        elif index == 4:
+            filename = "inner_coding.cl"
+            kernelname.append("run_1_2_qpsk")
+            kernelname.append("run_1_2_16qam")
+            kernelname.append("run_3_4_qpsk")
+            kernelname.append("run_3_4_16qam")
+            buffersize_in = 126*4*2# 126 * uint
+            buffersize_out = 2016*8 # 2016 * float2 
+            kernel_parallel_task = 1008 #1024
+            kernel_workgroupsize = 63 #64
+            # generate random bytes
+            data_to_encode = numpy.fromstring(numpy.random.bytes(buffersize_in), dtype=numpy.uint32)
         else:
             print "index out of range"
             return
         
         for k in kernelname:
-            print "Kernel \"%s\" from file \"%s\" :" % (k,filename)
             kernel = tb.load_kernel(filename, k)
-        
+            #print kernel.get_work_group_info(cl.kernel_work_group_info.WORK_GROUP_SIZE, self.cd)
+            #print kernel.get_work_group_info(cl.kernel_work_group_info.COMPILE_WORK_GROUP_SIZE, self.cd)
+
             # opencl buffer
             self.inputbuffer = cl.Buffer(self.ctx , cl.mem_flags.READ_ONLY, size=buffersize_in)
             # opencl buffer
@@ -92,7 +118,8 @@ class test_bench():
             testcycles = 0
             while self.thread_event.is_set() == False:
                 kernel.set_args(self.inputbuffer, self.outputbuffer)
-                cl.enqueue_nd_range_kernel(self.queue,kernel,(kernel_parallel_task,),None ).wait()
+                
+                cl.enqueue_nd_range_kernel(self.queue,kernel,[kernel_parallel_task,],[kernel_workgroupsize,],g_times_l=False ).wait()
                 testcycles += 1
                 
             print "Test duration: %.9f sec" % (time.time() - t)
@@ -102,7 +129,60 @@ class test_bench():
     def test_stop(self):
         self.thread_event.set()
 
+    def test_signalmapping(self):
+        print "test_signalmapping:"
+        # opencl buffer uint
+        self.inputbuffer = cl.Buffer(self.ctx , cl.mem_flags.READ_WRITE, size=4)
+        # opencl buffer float2
+        self.outputbuffer = cl.Buffer(self.ctx , cl.mem_flags.READ_WRITE, size=8*4)
+
+        kernel = tb.load_kernel("signal_constellation.cl", "qpsk")
+        data_to_decode = numpy.array([0,0,0,0], dtype=numpy.complex64)
+            
+        for i in range(0,4):
+            data_to_encode = numpy.array([i], dtype=numpy.uint32)
+            print "%d%d%d%d%d%d" % ((i & 0x20)>>5,(i & 0x10)>>4,(i & 0x08)>>3,(i & 0x04)>>2,(i & 0x02)>>1,(i & 0x01)>>0)
+            print "DVB-SPEC: %d%d" % ((i & 0x01)>>0,(i & 0x02)>>1)
+
+            # copy data to the compute unit
+            cl.enqueue_copy(self.queue, self.inputbuffer, data_to_encode).wait()
+            kernel.set_args(self.inputbuffer, self.outputbuffer)
+            cl.enqueue_nd_range_kernel(self.queue,kernel,(1,),None ).wait()
+            cl.enqueue_copy(self.queue, data_to_decode, self.outputbuffer).wait()
+            print data_to_decode
+
+        kernel = tb.load_kernel("signal_constellation.cl", "qam_16")
+        data_to_decode = numpy.array([0,0,0,0], dtype=numpy.complex64)
+
+        for i in range(0,16):
+            data_to_encode = numpy.array([i], dtype=numpy.uint32)
+            print "%d%d%d%d%d%d" % ((i & 0x20)>>5,(i & 0x10)>>4,(i & 0x08)>>3,(i & 0x04)>>2,(i & 0x02)>>1,(i & 0x01)>>0)
+            print "DVB-SPEC: %d%d%d%d" % ((i & 0x01)>>0,(i & 0x02)>>1,(i & 0x04)>>2,(i & 0x08)>>3)
+
+            # copy data to the compute unit
+            cl.enqueue_copy(self.queue, self.inputbuffer, data_to_encode).wait()
+            kernel.set_args(self.inputbuffer, self.outputbuffer)
+            cl.enqueue_nd_range_kernel(self.queue,kernel,(1,),None ).wait()
+            cl.enqueue_copy(self.queue, data_to_decode, self.outputbuffer).wait()
+            print data_to_decode
+
+        kernel = tb.load_kernel("signal_constellation.cl", "qam_64")
+        data_to_decode = numpy.array([0,0,0,0], dtype=numpy.complex64)
+
+        for i in range(0,64):
+            data_to_encode = numpy.array([i], dtype=numpy.uint32)
+            print "%d%d%d%d%d%d" % ((i & 0x20)>>5,(i & 0x10)>>4,(i & 0x08)>>3,(i & 0x04)>>2,(i & 0x02)>>1,(i & 0x01)>>0)
+            print "DVB-SPEC: %d%d%d%d%d%d" % ((i & 0x01)>>0,(i & 0x02)>>1,(i & 0x04)>>2,(i & 0x08)>>3,(i & 0x10)>>4,(i & 0x20)>>5)
+
+            # copy data to the compute unit
+            cl.enqueue_copy(self.queue, self.inputbuffer, data_to_encode).wait()
+            kernel.set_args(self.inputbuffer, self.outputbuffer)
+            cl.enqueue_nd_range_kernel(self.queue,kernel,(1,),None ).wait()
+            cl.enqueue_copy(self.queue, data_to_decode, self.outputbuffer).wait()
+            print data_to_decode
+
     def test_fifo(self):
+        print "test_fifo:"
         teststring = ""
         testarray = []
         passed = 0
@@ -138,6 +218,7 @@ class test_bench():
         print "%d pass out of 100" % passed
 
     def load_kernel(self, filename, kernelname):
+        print "Kernel \"%s\" from file \"%s\" :" % (kernelname,filename)
         mf = cl.mem_flags
         #read in the OpenCL source file as a string
         self.f = open(filename, 'r')
@@ -157,11 +238,14 @@ if __name__ == '__main__':
                 print "GPU: %s" % found_device.name
             elif found_device.type == 2 :
                 print "CPU: %s" % found_device.name
+            #print "max_work_group_size: %d" % found_device.max_work_group_size
             # for each compute unit
-            tb = test_bench(found_device, 5)
+            tb = test_bench(found_device, 15)
             tb.test_fifo()
-            tb.test_execution_time(1)
-            tb.test_execution_time(2)
+            #tb.test_execution_time(1)
+            #tb.test_execution_time(2)
+            #tb.test_execution_time(3)
+            tb.test_execution_time(4)
 
             
 
