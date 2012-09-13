@@ -93,14 +93,40 @@ class test_bench():
             kernel_workgroupsize = 63 #64
             # generate random bytes
             data_to_encode = numpy.fromstring(numpy.random.bytes(buffersize_in), dtype=numpy.uint32)
+        elif index == 5:
+            filename = "symbol_interleaver_mapper.cl"
+            kernelname.append("interleaver_and_map_symbols0_6817")
+            #kernelname.append("interleaver_and_map_symbols1_6817")
+            #kernelname.append("interleaver_and_map_symbols2_6817")
+            #kernelname.append("interleaver_and_map_symbols3_6817")
+            buffersize_in = 6048*8# 6048 * float2 
+            buffersize_out = 6817*8 # 6817 * float2 
+            kernel_parallel_task = 6048
+            kernel_workgroupsize = 216
+            # generate random bytes
+            data_to_encode = numpy.fromstring(numpy.random.bytes(buffersize_in), dtype=numpy.complex64)
+        elif index == 6:
+            filename = "symbol_interleaver_mapper.cl"
+            kernelname.append("interleaver_and_map_symbols0_1704")
+            #kernelname.append("interleaver_and_map_symbols1_1704")
+            #kernelname.append("interleaver_and_map_symbols2_1704")
+            #kernelname.append("interleaver_and_map_symbols3_1704")
+            buffersize_in = 1512*8# 1512 * float2 1512
+            buffersize_out = 1704*8 # 1704 * float2 
+            kernel_parallel_task = 1512
+            kernel_workgroupsize = 216
+            # generate random bytes
+            data_to_encode = numpy.fromstring(numpy.random.bytes(buffersize_in), dtype=numpy.complex64)
         else:
             print "index out of range"
             return
         
         for k in kernelname:
             kernel = tb.load_kernel(filename, k)
-            #print kernel.get_work_group_info(cl.kernel_work_group_info.WORK_GROUP_SIZE, self.cd)
             #print kernel.get_work_group_info(cl.kernel_work_group_info.COMPILE_WORK_GROUP_SIZE, self.cd)
+            print "Max WORKGROUPSIZE is " 
+            print kernel.get_work_group_info(cl.kernel_work_group_info.WORK_GROUP_SIZE, self.cd)
+            print "requested: %d" % kernel_workgroupsize
 
             # opencl buffer
             self.inputbuffer = cl.Buffer(self.ctx , cl.mem_flags.READ_ONLY, size=buffersize_in)
@@ -245,7 +271,9 @@ if __name__ == '__main__':
             #tb.test_execution_time(1)
             #tb.test_execution_time(2)
             #tb.test_execution_time(3)
-            tb.test_execution_time(4)
+            #tb.test_execution_time(4)
+            tb.test_execution_time(5)
+            tb.test_execution_time(6)
 
             
 
