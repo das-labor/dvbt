@@ -170,7 +170,6 @@ class mapper():
                  # generate a new symbol
                  self.create_symbol_skeleton(i,self.tps_pilots.get_next())
                  tmp = numpy.array(self.mappedsymbols, dtype=numpy.complex64)
-                 print i
                  self.cl_thread_lock.acquire()
                  newbuf = cl.Buffer(self.ctx , cl.mem_flags.READ_ONLY, size=8*self.globalsettings.odfmcarriers)
                  cl.enqueue_copy(self.queue, newbuf, tmp)
@@ -401,12 +400,12 @@ class tps():
             self.bitarray.append((globalsettings.cellid & 0x00000002)>>1)
             self.bitarray.append((globalsettings.cellid & 0x00000001)>>0)
 
-       self.bitarray.append(0)
-       self.bitarray.append(0)
-       self.bitarray.append(0)
-       self.bitarray.append(0)
-       self.bitarray.append(0)
-       self.bitarray.append(0)
+        self.bitarray.append(0)
+        self.bitarray.append(0)
+        self.bitarray.append(0)
+        self.bitarray.append(0)
+        self.bitarray.append(0)
+        self.bitarray.append(0)
 
         self.shreg = self.bitarray
 
