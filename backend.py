@@ -23,6 +23,7 @@ import time
 import threading
 import mapper
 import clfifo
+import inner_coding
 
 class OpenCL:
     def __init__(self,globalsettings,eventstart,eventstop,lock):
@@ -58,27 +59,30 @@ class OpenCL:
         # create a opencl command queue
         self.queue = cl.CommandQueue(self.ctx)
 
-        # opencl fifo 1, 128 * 188 * uint
+        # opencl fifo ffmpeg -> outer coder, 128 * 188 * uint
         self.cfifo1 = clfifo.Fifo(self.ctx, self.queue, self.cl_thread_lock, numpy.dtype(numpy.uint32), 4*128*188)
 
-        # opencl fifo 2, 128 * 204 * uint
+        # opencl fifo outer coder -> inner coder, 128 * 204 * uint
         self.cfifo2 = clfifo.Fifo(self.ctx, self.queue, self.cl_thread_lock, numpy.dtype(numpy.uint32), 4*128*204)
 
-        # opencl fifo 3, TODO
-        self.cfifo3 = clfifo.Fifo(self.ctx, self.queue, self.cl_thread_lock, numpy.dtype(numpy.uint32), 4*128*204*2)
+        # opencl fifo inner coder -> symbol interleaver and mapper
+        self.cfifo3 = clfifo.Fifo(self.ctx, self.queue, self.cl_thread_lock, numpy.dtype(numpy.complex64), 32*1024*8)
 
-        # opencl fifo 4, TODO
-        self.cfifo4 = clfifo.Fifo(self.ctx, self.queue, self.cl_thread_lock, numpy.dtype(numpy.uint32), 4*128*204*2)
+        # opencl fifo symbol interleaver and mapper -> ifft
+        self.cfifo4 = clfifo.Fifo(self.ctx, self.queue, self.cl_thread_lock, numpy.dtype(numpy.complex64), 32*1024*8)
 
-        # opencl fifo 5, TODO
-        self.cfifo5 = clfifo.Fifo(self.ctx, self.queue, self.cl_thread_lock, numpy.dtype(numpy.uint32), 4*128*204*2)
+        # opencl fifo ifft -> guard interval / opengl output
+        self.cfifo5 = clfifo.Fifo(self.ctx, self.queue, self.cl_thread_lock, numpy.dtype(numpy.complex64), 32*1024*8)
 
         print "compiling kernels, this may take a while\nTODO: precompile binaries"
         # create the outer encoder
 	self.oc = outer_coding.encoder(self.ctx,self.queue,self.cl_thread_lock, self.cfifo1, self.cfifo2)
 
+        # create the inner encoder
+	self.ic = inner_coding.encoder(globalsettings, self.ctx, self.queue, self.cl_thread_lock, self.cfifo1, self.cfifo2)
+
         # create the ofdm symbol mapper
-        #self.symbolmapper = mapper.mapper(globalsettings, self.ctx, self.queue, self.cl_thread_lock)
+        self.symbolmapper = mapper.mapper(globalsettings, self.ctx, self.queue, self.cl_thread_lock, self.cfifo3, self.cfifo4 )
 
         # create a fft plan
         #self.fftplan = Plan((16, 16), queue=self.queue)
