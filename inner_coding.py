@@ -27,7 +27,14 @@ class encoder():
         self.program = cl.Program(ctx, fstr).build()
         self.f.close()
 
+        #save the global settings
         self.globalsettings = globalsettings
+
+	# save the opencl queue
+	self.queue = queue
+
+	# save the opencl context
+	self.ctx = ctx
 
         #create the opencl kernel
         if self.globalsettings.coderate == 0.5:
@@ -74,11 +81,6 @@ class encoder():
             # opencl buffer holding the computed data
             self.dest_buf = cl.Buffer(self.ctx, cl.mem_flags.WRITE_ONLY, 4032*8)
 
-	# save the opencl queue
-	self.queue = queue
-
-	# save the opencl context
-	self.ctx = ctx
 
         # thread lock for opencl
         self.cl_thread_lock = thread_lock
