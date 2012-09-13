@@ -27,7 +27,7 @@ class MainPanel(wx.Panel):
         self.lock = lock
         self.globalsettings.bandwidth = 8.0
         self.globalsettings.coderate = 0.5
-        self.globalsettings.odfmmode = 8192.0
+        self.globalsettings.odfmmode = 8192
         self.globalsettings.odfmcarriers = 6817
         self.globalsettings.odfmuseablecarriers = (self.globalsettings.odfmcarriers - 809)
         self.globalsettings.guardinterval = 0.25
@@ -36,6 +36,7 @@ class MainPanel(wx.Panel):
         self.globalsettings.ffmpegargs = ""
         self.globalsettings.ffmpeginputfile = ""
         self.globalsettings.computedevice = ""
+        self.globalsettings.cellid = 0
 
         self.channelarray = ["21	474Mhz","22	482Mhz","23	490Mhz","24	498Mhz","25	506Mhz","26	514Mhz","27	522Mhz","28	530Mhz","29	538Mhz","30	546Mhz","31	554Mhz","32	562Mhz","33	570Mhz","34	578Mhz","35	586Mhz","36	594Mhz","37	602Mhz","38	610Mhz","39	618Mhz","40	626Mhz","41	634Mhz","42	642Mhz","43	650Mhz","44	658Mhz","45	666Mhz","46	674Mhz","47	682Mhz","48	690Mhz","49	698Mhz","50	706Mhz","51	714Mhz","52	722Mhz","53	730Mhz","54	738Mhz","55	746Mhz","56	754Mhz","57	762Mhz","58	770Mhz","59	778Mhz","60	786Mhz","61	794Mhz","62	802Mhz","63	810Mhz","64	818Mhz","65	826Mhz","66	834Mhz","67	842Mhz","68	850Mhz","69	858Mhz"]
 
@@ -187,11 +188,11 @@ class MainPanel(wx.Panel):
 
     def EvtComboBoxmodulation(self, event):
         if event.GetString() == "QPSK":
-            self.globalsettings.modulation = 2.0
+            self.globalsettings.modulation = 2
         if event.GetString() == "16-QAM":
-            self.globalsettings.modulation = 4.0
+            self.globalsettings.modulation = 4
         if event.GetString() == "64-QAM":
-            self.globalsettings.modulation = 6.0
+            self.globalsettings.modulation = 6
         self.updateGlobalSettings()
 
     def EvtComboBoxchannellist(self, event):
