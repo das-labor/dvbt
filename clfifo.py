@@ -43,7 +43,7 @@ class Fifo:
     def append(self, data, size):
         while (self.space_left() < size):
             self.inputevent.clear()
-            self.inputevent.wait()
+            self.inputevent.wait(1.0)
 
         size *= self.type.itemsize
         self.thread_lock.acquire()
@@ -52,14 +52,13 @@ class Fifo:
         cl.enqueue_copy(self.queue, self.cl_fifo_bufferA, data, byte_count=size, src_offset=0, dest_offset=self.fifo_buffer_length)
         self.fifo_buffer_length += size
         self.cl_thread_lock.release()
-
-        self.outputevent.set()
         self.thread_lock.release()
+        self.outputevent.set()
 
     def pop(self,clbuffer, size):
         while (self.len() < size):
             self.outputevent.clear()
-            self.outputevent.wait()
+            self.outputevent.wait(1.0)
 
         size *= self.type.itemsize
         self.thread_lock.acquire()
@@ -67,21 +66,20 @@ class Fifo:
         self.cl_thread_lock.acquire()
 
         # read data from the beginning of the buffer
-        cl.enqueue_copy(self.queue, clbuffer, self.cl_fifo_bufferA, byte_count=size, src_offset=0, dest_offset=0)
+        cl.enqueue_copy(self.queue, clbuffer, self.cl_fifo_bufferA, byte_count=size, src_offset=0, dest_offset=0).wait()
 
         self.fifo_buffer_length -= size
 
         if self.fifo_buffer_length > 0:
             # copy all data to the beginning of the buffer
-            cl.enqueue_copy(self.queue, self.cl_fifo_bufferB, self.cl_fifo_bufferA, byte_count=self.fifo_buffer_length, src_offset=size, dest_offset=0)
+            cl.enqueue_copy(self.queue, self.cl_fifo_bufferB, self.cl_fifo_bufferA, byte_count=self.fifo_buffer_length, src_offset=size, dest_offset=0).wait()
 
             # copy all data to the beginning of the buffer
-            cl.enqueue_copy(self.queue, self.cl_fifo_bufferA, self.cl_fifo_bufferB, byte_count=self.fifo_buffer_length, src_offset=0, dest_offset=0)
+            cl.enqueue_copy(self.queue, self.cl_fifo_bufferA, self.cl_fifo_bufferB, byte_count=self.fifo_buffer_length, src_offset=0, dest_offset=0).wait()
 
         self.cl_thread_lock.release()
-
-        self.inputevent.set()
         self.thread_lock.release()
+        self.inputevent.set()
 
     def len(self):
         self.thread_lock.acquire()
