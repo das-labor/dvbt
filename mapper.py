@@ -110,10 +110,10 @@ class mapper():
     def map_symbols(self):
 
         # load the correct skeleton
-        skeleton = self.skeleton_opencl_buffers.index(self.symbol_counter)
+        skeleton = self.skeleton_opencl_buffers[self.symbol_counter]
 
         # copy data from fifo
-        self.inputfifo.pop(self.src_buf, self.globalsettings.odfmuseablecarriers*8)
+        self.inputfifo.pop(self.src_buf, self.globalsettings.odfmuseablecarriers)
 
         self.cl_thread_lock.acquire()
 
@@ -152,7 +152,7 @@ class mapper():
         self.cl_thread_lock.release()
 
         # write data to fifo
-        self.outputfifo.append(self.dest_buf, self.globalsettings.odfmmode * 8)
+        self.outputfifo.append(self.dest_buf, self.globalsettings.odfmmode)
 
         self.symbol_counter += 1
         if self.symbol_counter == 272:
@@ -161,6 +161,7 @@ class mapper():
     # create all the 272 symbols
     def create_skeletons(self):
         # for every frame
+        print "precalculate all skeletons"
         for f in range(0,4):
             print "frame %d" % f
             self.tps_pilots = tps(self.globalsettings,f)
@@ -410,7 +411,7 @@ class tps():
         self.shreg = self.bitarray
 
         # insert 0's
-        for j in range(0,(68-53)):
+        for j in range(0,(67-53)):
              self.shreg.insert(0,0)
 
         print len(self.shreg)
@@ -418,17 +419,17 @@ class tps():
         # bch encode the tps bits
         for j in range(0,53):
              for i in range(0,j):
-                 self.shreg.insert(0,self.shreg.pop(67))
+                 self.shreg.insert(0,self.shreg.pop(66))
              for p in self.bchpolynom:
-                 self.shreg.insert(0,self.shreg.pop(67)^p)
+                 self.shreg.insert(0,self.shreg.pop(66)^p)
              for i in range(0,53-j):
-                 self.shreg.insert(0,self.shreg.pop(67))
+                 self.shreg.insert(0,self.shreg.pop(66))
 
         print "tps BCH shiftreg"
         print self.shreg
 
         # copy paritiy bits
-        for j in range(0,(68-53)):
+        for j in range(0,(67-53)):
              self.bitarray.append(self.shreg.pop(0))
 
         print "tps bit array + parity bits"
