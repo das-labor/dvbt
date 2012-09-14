@@ -41,46 +41,51 @@ class encoder():
             if self.globalsettings.modulation == 2:
                 self.kernel1 = cl.Kernel(self.program,"run_1_2_qpsk")
                 self.inputsize = 63*4
-                self.src_buf = cl.Buffer(self.ctx, cl.mem_flags.READ_ONLY, self.inputsize)
+                self.src_buf = cl.Buffer(self.ctx, cl.mem_flags.READ_WRITE, self.inputsize)
 
             if self.globalsettings.modulation == 4:
                 self.kernel1 = cl.Kernel(self.program,"run_1_2_16qam")
                 self.inputsize = 126*4
-                self.src_buf = cl.Buffer(self.ctx, cl.mem_flags.READ_ONLY, self.inputsize)
+                self.src_buf = cl.Buffer(self.ctx, cl.mem_flags.READ_WRITE, self.inputsize)
 
 
             if self.globalsettings.modulation == 6:
                 self.kernel1 = cl.Kernel(self.program,"run_1_2_64qam")
                 self.inputsize = 189*4
-                self.src_buf = cl.Buffer(self.ctx, cl.mem_flags.READ_ONLY, self.inputsize)
+                self.src_buf = cl.Buffer(self.ctx, cl.mem_flags.READ_WRITE, self.inputsize)
 
 
             self.num_workgroups = 16
             self.outputsize = 2016*8
             # opencl buffer holding the computed data
-            self.dest_buf = cl.Buffer(self.ctx, cl.mem_flags.WRITE_ONLY, 2016*8)
+            self.dest_buf = cl.Buffer(self.ctx, cl.mem_flags.READ_WRITE, self.outputsize)
 
         elif self.globalsettings.coderate == 2.0 / 3.0:
             if self.globalsettings.modulation == 2:
                 self.kernel1 = cl.Kernel(self.program,"run_2_3_qpsk")
-                self.inputsize = 189*1
-                self.src_buf = cl.Buffer(self.ctx, cl.mem_flags.READ_ONLY, self.inputsize)
+                self.inputsize = 189*1*4
+                self.src_buf = cl.Buffer(self.ctx, cl.mem_flags.READ_WRITE, self.inputsize)
 
             if self.globalsettings.modulation == 4:
                 self.kernel1 = cl.Kernel(self.program,"run_2_3_16qam")
-                self.inputsize = 189*2
-                self.src_buf = cl.Buffer(self.ctx, cl.mem_flags.READ_ONLY, self.inputsize)
+                self.inputsize = 189*2*4
+                self.src_buf = cl.Buffer(self.ctx, cl.mem_flags.READ_WRITE, self.inputsize)
 
             if self.globalsettings.modulation == 6:
                 self.kernel1 = cl.Kernel(self.program,"run_2_3_64qam")
-                self.inputsize = 189*3
-                self.src_buf = cl.Buffer(self.ctx, cl.mem_flags.READ_ONLY, self.inputsize)
+                self.inputsize = 189*3*4
+                self.src_buf = cl.Buffer(self.ctx, cl.mem_flags.READ_WRITE, self.inputsize)
 
             self.num_workgroups = 32
             self.outputsize = 4032*8
             # opencl buffer holding the computed data
-            self.dest_buf = cl.Buffer(self.ctx, cl.mem_flags.WRITE_ONLY, 4032*8)
+            self.dest_buf = cl.Buffer(self.ctx, cl.mem_flags.READ_WRITE, self.outputsize)
+        else:
+	    print "inner coding: unknown coderate ! exting ..."
+            return
 
+        self.inputsize /= 4 # convert to num_uint
+        self.outputsize /= 8 # convert to num_float2
 
         # thread lock for opencl
         self.cl_thread_lock = thread_lock
@@ -98,7 +103,7 @@ class encoder():
         self.inputfifo.pop(self.src_buf, self.inputsize)
         self.cl_thread_lock.acquire()
         self.kernel1.set_args(self.src_buf, self.dest_buf)
-        cl.enqueue_nd_range_kernel(self.queue,self.kernel1,(self.num_workgroups*63,),(63,0),None )
+        cl.enqueue_nd_range_kernel(self.queue,self.kernel1,(self.num_workgroups*63,),(63,),None )
         self.cl_thread_lock.release()
         # write data to fifo
         self.outputfifo.append(self.dest_buf, self.outputsize)
