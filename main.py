@@ -23,6 +23,7 @@ import ffmpeg
 import backend
 import create_opencl_files
 import os, tempfile, sys
+import opengl
 
 if __name__ == '__main__':
     # create all the opencl files if neccessary
@@ -35,9 +36,18 @@ if __name__ == '__main__':
     Settings = manager.Namespace()
     
     tmpdir = tempfile.mkdtemp()
-    ffmpegfifo = os.path.join(tmpdir, 'myfifo')
+    ffmpegfifo = os.path.join(tmpdir, 'ffmpegfifo')
+
     try:
         os.mkfifo(ffmpegfifo)
+    except OSError, e:
+        print "Failed to create FIFO: %s" % e
+        sys.exit(1)
+
+    openglfifo = os.path.join(tmpdir, 'openglfifo')
+
+    try:
+        os.mkfifo(openglfifo)
     except OSError, e:
         print "Failed to create FIFO: %s" % e
         sys.exit(1)
@@ -46,14 +56,16 @@ if __name__ == '__main__':
     eventstart = Event()
     lock = Lock()
     Settings.ffmpegfifo = ffmpegfifo
-
+    Settings.openglfifo = openglfifo
     gui = Process(target=dvbtgui.gui, args=(Settings,eventstart,eventstop,lock,))
     server = Process(target=backend.startbackend, args=(Settings,eventstart,eventstop,lock,))
     ffmpeg = Process(target=ffmpeg.daemon, args=(Settings,eventstart,eventstop,lock,))
+    fifo2screen = Process(target=opengl.daemon, args=(Settings,eventstart,eventstop,lock,))
     gui.start()
     eventstart.wait()
     server.start()
     ffmpeg.start()
+    fifo2screen.start()
 
     gui.join()
     server.terminate()
@@ -61,5 +73,6 @@ if __name__ == '__main__':
     ffmpeg.terminate()
     ffmpeg.join()
     os.remove(ffmpegfifo)
+    os.remove(openglfifo)
     os.rmdir(tmpdir)
     sys.exit(0)
