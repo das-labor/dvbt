@@ -34,6 +34,9 @@ class Fifo:
         # holds a cl.Buffer
         self.cl_fifo_bufferB = cl.Buffer(self.ctx , cl.mem_flags.READ_WRITE, size=self.fifo_buffer_size)
 
+        # self active buffer 0 == A, 1 == B
+        self.active_buffer = 0
+
         # current data stored in buffer
         self.fifo_buffer_length = 0
 
@@ -49,10 +52,15 @@ class Fifo:
         self.thread_lock.acquire()
 
         self.cl_thread_lock.acquire()
-        cl.enqueue_copy(self.queue, self.cl_fifo_bufferA, data, byte_count=size, src_offset=0, dest_offset=self.fifo_buffer_length)
+        if self.active_buffer == 0:
+            appendevent = cl.enqueue_copy(self.queue, self.cl_fifo_bufferA, data, byte_count=size, src_offset=0, dest_offset=self.fifo_buffer_length)
+        elif self.active_buffer == 1:
+            appendevent = cl.enqueue_copy(self.queue, self.cl_fifo_bufferB, data, byte_count=size, src_offset=0, dest_offset=self.fifo_buffer_length)
+
         self.fifo_buffer_length += size
         self.cl_thread_lock.release()
         self.thread_lock.release()
+        appendevent.wait()
         self.outputevent.set()
 
     def pop(self,clbuffer, size):
@@ -66,19 +74,25 @@ class Fifo:
         self.cl_thread_lock.acquire()
 
         # read data from the beginning of the buffer
-        cl.enqueue_copy(self.queue, clbuffer, self.cl_fifo_bufferA, byte_count=size, src_offset=0, dest_offset=0).wait()
+        popevent = cl.enqueue_copy(self.queue, clbuffer, self.cl_fifo_bufferA, byte_count=size, src_offset=0, dest_offset=0)
 
         self.fifo_buffer_length -= size
 
         if self.fifo_buffer_length > 0:
             # copy all data to the beginning of the buffer
-            cl.enqueue_copy(self.queue, self.cl_fifo_bufferB, self.cl_fifo_bufferA, byte_count=self.fifo_buffer_length, src_offset=size, dest_offset=0).wait()
+            if self.active_buffer == 0:
+                 cl.enqueue_copy(self.queue, self.cl_fifo_bufferB, self.cl_fifo_bufferA, byte_count=self.fifo_buffer_length, src_offset=size, dest_offset=0)
+                 self.active_buffer = 1
+            else:
+                 cl.enqueue_copy(self.queue, self.cl_fifo_bufferA, self.cl_fifo_bufferB, byte_count=self.fifo_buffer_length, src_offset=size, dest_offset=0)
+                 self.active_buffer = 0
 
             # copy all data to the beginning of the buffer
-            cl.enqueue_copy(self.queue, self.cl_fifo_bufferA, self.cl_fifo_bufferB, byte_count=self.fifo_buffer_length, src_offset=0, dest_offset=0).wait()
+            #cl.enqueue_copy(self.queue, self.cl_fifo_bufferA, self.cl_fifo_bufferB, byte_count=self.fifo_buffer_length, src_offset=0, dest_offset=0)
 
         self.cl_thread_lock.release()
         self.thread_lock.release()
+        popevent.wait()
         self.inputevent.set()
 
     def len(self):
