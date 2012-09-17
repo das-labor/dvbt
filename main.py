@@ -19,11 +19,10 @@
 
 from multiprocessing import Process, Pipe, Manager, Lock, Event
 import dvbtgui
-import ffmpeg
 import backend
 import create_opencl_files
 import os, tempfile, sys
-import opengl
+import subprocess
 
 if __name__ == '__main__':
     # create all the opencl files if neccessary
@@ -55,24 +54,30 @@ if __name__ == '__main__':
     eventstop = Event()
     eventstart = Event()
     lock = Lock()
+
     Settings.ffmpegfifo = ffmpegfifo
     Settings.openglfifo = openglfifo
-    gui = Process(target=dvbtgui.gui, args=(Settings,eventstart,eventstop,lock,))
-    server = Process(target=backend.startbackend, args=(Settings,eventstart,eventstop,lock,))
-    ffmpeg = Process(target=ffmpeg.daemon, args=(Settings,eventstart,eventstop,lock,))
-    fifo2screen = Process(target=opengl.daemon, args=(Settings,eventstart,eventstop,lock,))
-    gui.start()
-    eventstart.wait()
-    server.start()
-    ffmpeg.start()
-    fifo2screen.start()
 
-    gui.join()
-    server.terminate()
-    server.join()
-    ffmpeg.terminate()
-    ffmpeg.join()
+    process_gui = Process(target=dvbtgui.gui, args=(Settings,eventstart,eventstop,lock,), name="dvbtgui.py")
+    process_server = Process(target=backend.startbackend, args=(Settings,eventstop,lock,), name="backend.py")
+    process_gui.start()
+    eventstart.wait()
+
+    process_server.start()
+    process_ffmpeg = subprocess.Popen("ffmpeg -i %s -f mpegts -vcodec mpeg2video -b %4.0dk -acodec mp2 -ac 2 -ab 128k -ar 44100 %s -y %s >/dev/null 2>&1" % (Settings.ffmpeginputfile,Settings.usablebitrate/1000,Settings.ffmpegargs,Settings.ffmpegfifo), shell=True)
+    process_fifo2screen = subprocess.Popen("%s/fifo2screen %s -w" % (os.getcwd(),Settings.openglfifo), shell=True)
+
+    process_gui.join()
+    process_server.terminate()
+    process_server.join()
+    process_ffmpeg.terminate()
+    process_ffmpeg.wait()
+    process_fifo2screen.terminate()
+    process_fifo2screen.wait()
+
     os.remove(ffmpegfifo)
     os.remove(openglfifo)
     os.rmdir(tmpdir)
     sys.exit(0)
+
+       
