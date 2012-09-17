@@ -281,7 +281,7 @@ class file_creator():
         f.write("/* the first byte of one packet is a sync byte ( 0xb8 or 0x47 ) and is not xor'd */\n")
         f.write("/* the pbrs is reinitialized on every 8th packet (after 1504 bytes) */\n")
 
-        f.write("switch(pbrs_index)\n{\n")
+        f.write("switch(pbrs_index%8)\n{\n")
         for j in range(0,8):
             for i in range(0,47):
                 if i == 0:
@@ -358,7 +358,7 @@ class file_creator():
                 infotext = " inner coder: folding code: %s, bitwise interleaving, %s signal mapping\n" % (cr, md)
                 infotext += " use %d interleavers (%s mode)\n" % (mdbits,md) 
                 infotext += " execute with 63 work group size.\n"
-                infotext += " each workgroup processes %d*126 bit\n" % i
+                infotext += " each workgroup processes %d*126 bit\n" % (i+1)
                 infotext += " workgroup input 126 bit, output 126 float2\n"
                 infotext += " execute TODO workgroups at once: TODO uints in, 16*126 = 2016 float2 out\n"
                 f.write("/*\n %s */\n" % infotext)
