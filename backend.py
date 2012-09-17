@@ -24,12 +24,12 @@ import threading
 import mapper
 import clfifo
 import inner_coding
+import guardinterval
 
-class OpenCL:
-    def __init__(self,globalsettings,eventstart,eventstop,lock):
+class DVBTencoder:
+    def __init__(self,globalsettings,eventstop,lock):
         # store the settings
         self.globalsettings = globalsettings
-        self.eventstart = eventstart
         self.eventstop = eventstop
         self.globallock = lock
 
@@ -60,23 +60,24 @@ class OpenCL:
         self.queue = cl.CommandQueue(self.ctx)
 
         # opencl fifo ffmpeg -> outer coder, 128 * 188 * uint
-        self.cfifo1 = clfifo.Fifo(self.ctx, self.queue, self.cl_thread_lock, numpy.dtype(numpy.uint32), 4*128*188)
+        self.cfifo1 = clfifo.Fifo(self.ctx, self.queue, self.cl_thread_lock, numpy.dtype(numpy.uint32), 4*32*188)
 
         # opencl fifo outer coder -> inner coder, 128 * 204 * uint
-        self.cfifo2 = clfifo.Fifo(self.ctx, self.queue, self.cl_thread_lock, numpy.dtype(numpy.uint32), 4*128*204)
+        self.cfifo2 = clfifo.Fifo(self.ctx, self.queue, self.cl_thread_lock, numpy.dtype(numpy.uint32), 4*32*204)
 
         # opencl fifo inner coder -> symbol interleaver and mapper
-        self.cfifo3 = clfifo.Fifo(self.ctx, self.queue, self.cl_thread_lock, numpy.dtype(numpy.complex64), 32*1024*8)
+        self.cfifo3 = clfifo.Fifo(self.ctx, self.queue, self.cl_thread_lock, numpy.dtype(numpy.complex64), 32*1024)
 
         # opencl fifo symbol interleaver and mapper -> ifft
-        self.cfifo4 = clfifo.Fifo(self.ctx, self.queue, self.cl_thread_lock, numpy.dtype(numpy.complex64), 32*1024*8)
+        self.cfifo4 = clfifo.Fifo(self.ctx, self.queue, self.cl_thread_lock, numpy.dtype(numpy.complex64), 32*1024)
 
         # opencl fifo ifft -> guard interval / opengl output
-        self.cfifo5 = clfifo.Fifo(self.ctx, self.queue, self.cl_thread_lock, numpy.dtype(numpy.complex64), 32*1024*8)
+        #self.cfifo5 = clfifo.Fifo(self.ctx, self.queue, self.cl_thread_lock, numpy.dtype(numpy.complex64), 32*1024)
 
         print "compiling kernels, this may take a while\nTODO: precompile binaries"
         # create the outer encoder
-	self.oc = outer_coding.encoder(self.ctx,self.queue,self.cl_thread_lock, self.cfifo1, self.cfifo2)
+        self.fifo_buf_size = 32
+	self.oc = outer_coding.encoder(self.ctx,self.queue,self.cl_thread_lock, self.cfifo1, self.cfifo2, self.fifo_buf_size)
 
         # create the inner encoder
 	self.ic = inner_coding.encoder(globalsettings, self.ctx, self.queue, self.cl_thread_lock, self.cfifo2, self.cfifo3)
@@ -85,13 +86,12 @@ class OpenCL:
         self.symbolmapper = mapper.mapper(globalsettings, self.ctx, self.queue, self.cl_thread_lock, self.cfifo3, self.cfifo4 )
 
         # create a fft plan
-        self.fftplan = Plan(self.globalsettings.odfmmode,dtype=numpy.complex64, fast_math=True,context=self.ctx, queue=self.queue)
+        self.fftplan = Plan(self.globalsettings.odfmmode,dtype=numpy.complex64,normalize=True, fast_math=True,context=self.ctx, queue=self.queue)
 
         # opencl buffer holding data for the ifft - including pilots # 8k or 2k size ???
         self.fftbuffer = cl.Buffer(self.ctx , cl.mem_flags.READ_WRITE, size=(self.globalsettings.odfmmode*8))
 
-        # opencl buffer holding the time domain data, Tu + Tg
-        self.timedomainbuffer = cl.Buffer(self.ctx , cl.mem_flags.READ_WRITE, size=int(self.globalsettings.odfmmode*8))
+        self.gi = guardinterval.encoder(globalsettings, self.ctx, self.queue, self.cl_thread_lock, self.fftbuffer, self.outputfd)
 
         # create a new thread for reading input data asyncronly
         self.thread_input_fifo = threading.Thread(group=None,target=self.thread_input_from_fifo)
@@ -105,26 +105,24 @@ class OpenCL:
         # create a new thread for symbol mapper
         self.thread_sm = threading.Thread(group=None,target=self.thread_symbol_mapper)
 
-        # create a new thread for ifft
+        # create a new thread for ifft and guard interval creation
         self.thread_if = threading.Thread(group=None,target=self.thread_ifft)
 
-        #self.timer = threading.Timer(1.0, self.thread_setthreadevent)
-        #self.timer.start()
-
     def thread_input_from_fifo(self):
-        fifo_dest_buf = cl.Buffer(self.ctx , cl.mem_flags.READ_ONLY, size=188*8)
+        
+        fifo_dest_buf = cl.Buffer(self.ctx , cl.mem_flags.READ_ONLY, size=(self.fifo_buf_size*188))
         while self.eventstop.is_set() == False:
-            tspacket = self.inputfd.read(188*8)
+            tspacket = self.inputfd.read(self.fifo_buf_size*188)
             if len(tspacket) == 0:
                 break
             fifo_data = numpy.fromstring(tspacket, dtype=numpy.uint32)
             
             self.cl_thread_lock.acquire()
-            cl.enqueue_copy(self.queue, fifo_dest_buf, fifo_data).wait()
+            cl.enqueue_copy(self.queue, fifo_dest_buf, fifo_data)
             self.cl_thread_lock.release()
 
             # no need to lock the fifo
-            self.cfifo1.append(fifo_dest_buf,188*2) # 188*2 uints
+            self.cfifo1.append(fifo_dest_buf,(self.fifo_buf_size*188)/4) 
 
 
     def thread_outer_coder(self):
@@ -140,19 +138,24 @@ class OpenCL:
             self.symbolmapper.map_symbols()
 
     def thread_ifft(self):
+        iteration = 0
+        t = time.time()
         while self.eventstop.is_set() == False:
+            iteration += 1
             # copy data from fifo
             self.cfifo4.pop(self.fftbuffer , self.globalsettings.odfmmode)
             self.cl_thread_lock.acquire()
-            #self.fftplan.execute(self.fftbuffer, data_out=None, inverse=True, batch=1, wait_for_finish=True)
+            self.fftplan.execute(self.fftbuffer, data_out=None, inverse=True, batch=1, wait_for_finish=True)
+            self.gi.encode()
             self.cl_thread_lock.release()
-            # write data to fifo
-            self.cfifo5.append(self.fftbuffer, self.globalsettings.odfmmode)
+            if (time.time() - t) > 1.0:
+                self.debugprint( "MSymbols/s out %f " % (self.globalsettings.odfmmode*2.0*iteration/0x100000) )
+                iteration = 0
+                t = time.time()
 
-    #def thread_setthreadevent(self):
-        #self.thread_event.set()
-        #self.timer = threading.Timer(1.0, self.thread_setthreadevent)
-        #self.timer.start()
+            # write data to fifo
+            #self.cfifo5.append(self.fftbuffer, self.globalsettings.odfmmode)
+
 
     def run(self):
         self.debugprint("Opencl backend alive!")
@@ -162,42 +165,24 @@ class OpenCL:
         self.thread_ic.start()
         self.thread_sm.start()
         self.thread_if.start()
-        gi_data = numpy.array(numpy.zeros(self.globalsettings.odfmmode), dtype=numpy.complex64)
-        iteration = 0
-        t = time.time()
 
-        while self.eventstop.is_set() == False:
-            iteration += 1
-            #check for new data available from pipe
-
-            # read data from fifo
-            self.cfifo5.pop(self.timedomainbuffer, self.globalsettings.odfmmode)
-            self.cl_thread_lock.acquire()
-
-            # read data from the beginning of the buffer
-            cl.enqueue_copy(self.queue, gi_data, self.timedomainbuffer).wait()
-
-            # read data from the beginning of the buffer
-            #cl.enqueue_copy(self.queue, data, self.timedomainbuffer, byte_count=(self.globalsettings.odfmmode*8*self.globalsettings.guardinterval), src_offset=0, dest_offset=(self.globalsettings.odfmmode*8))
-            self.cl_thread_lock.release()
-
-            #self.outputfd.write(gi_data.astype(numpy.uint8))
-            if (time.time() - t) > 1.0:
-                self.debugprint( "MSymbols/s out %f " % (self.globalsettings.odfmmode*2*iteration/0x100000) )
-                iteration = 0
-                t = time.time()
-
-            #self.debugprint( "%.9f sec/pass" % (time.time() - t))
-            #self.thread_event.clear()
-            # TODO: how long to wait ?
-            #self.thread_event.wait(10000)
+        self.eventstop.wait()
 
         self.debugprint("exiting!")
+        self.thread_input_fifo.cancel()
+        self.thread_input_fifo.join()
+        self.thread_oc.cancel()
+        self.thread_oc.join()
+        self.thread_ic.cancel()
+        self.thread_ic.join()
+        self.thread_sm.cancel()
+        self.thread_sm.join()
+        self.thread_if.cancel()
+        self.thread_if.join()
         self.cleanup()
 
     def cleanup(self):
-        self.thread_output_fifo.cancel()
-        self.thread_input_fifo.join()
+
         self.inputfd.close()
         self.outputfd.close()
 
@@ -207,7 +192,7 @@ class OpenCL:
         self.globallock.release()
 
 
-def startbackend(globalsettings,eventstart,eventstop,lock):
-    backend = OpenCL(globalsettings,eventstart,eventstop,lock)
+def startbackend(globalsettings,eventstop,lock):
+    backend = DVBTencoder(globalsettings,eventstop,lock)
     backend.run()
 
