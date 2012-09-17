@@ -46,6 +46,12 @@ class file_creator():
             self.create_symbol_interleaver_and_fft_mapper(f,2,1704)
             self.create_symbol_interleaver_and_fft_mapper(f,3,1704)
             f.close()
+        if not os.path.isfile("guardinterval.cl"):
+            print "guardinterval.cl doesn't exist ! creating file ..."
+            f = open('guardinterval.cl', 'w')
+            f.write(copyright)
+            self.create_guardinterval(f)
+            f.close()
         #if not os.path.isfile("fft_mapper.cl"):
             #print "fft_mapper.cl doesn't exist ! creating file ..."
             #f = open('fft_mapper.cl', 'w')
@@ -964,6 +970,19 @@ class file_creator():
         f.write("\t};\n")
         f.write("\tout[outpos]=in[inpos];\n")
         f.write("}\n\n")
+
+    def create_guardinterval(self, f):
+        f.write("__kernel void encode( __global float2 *in, __global uint *out, __const uint guardrange)\n{\n")
+        f.write("\tfloat2 tmp=clamp (in[get_global_id(0)<<1], -127, 127);\n")
+        f.write("\tfloat2 tmp2=clamp (in[(get_global_id(0)<<1)+1], -127, 127);\n")
+        f.write("\tuint out_val;\n")
+        f.write("\tout_val = ((uchar)tmp.x+127)|((uchar)tmp.y+127)<<8|((uchar)tmp.x+127)<<16|((uchar)tmp.y+127)<<24;\n")
+        f.write("\tout[get_global_id(0)] = out_val;\n")
+        f.write("\tif(get_global_id(0) < guardrange)\n")
+        f.write("\t{\n")
+        f.write("\t\tout[get_global_id(0)+get_global_size(0)] = out_val;\n")
+        f.write("\t}\n")
+        f.write("}\n")
 
 
 if __name__ == '__main__':
