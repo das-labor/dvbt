@@ -18,7 +18,7 @@ import numpy
 import clfifo
 
 class encoder():
-    def __init__(self, ctx, queue, thread_lock, in_fifo, out_fifo):
+    def __init__(self, ctx, queue, thread_lock, in_fifo, out_fifo, batchsize):
         mf = cl.mem_flags
 
         #read in the OpenCL source file as a string
@@ -26,6 +26,15 @@ class encoder():
         fstr = "".join(self.f.readlines())
         self.program = cl.Program(ctx, fstr).build()
         self.f.close()
+
+        # save the batch size
+        self.batchsize = batchsize
+
+        # save the dest buffer size
+        self.dest_buf_size = batchsize * 204
+
+        # save the src buffer size
+        self.src_buf_size = batchsize * 188
 
         #create the opencl kernel
         self.kernel1 = cl.Kernel(self.program,"run")
@@ -40,10 +49,10 @@ class encoder():
         self.cl_thread_lock = thread_lock
 
         # opencl buffer holding the computed data
-        self.dest_buf = cl.Buffer(self.ctx, cl.mem_flags.READ_WRITE, 204*8*4)
+        self.dest_buf = cl.Buffer(self.ctx, cl.mem_flags.READ_WRITE, self.dest_buf_size*4)
 
         # opencl buffer holding the input data
-        self.src_buf = cl.Buffer(self.ctx, cl.mem_flags.READ_WRITE, 188*8*4)
+        self.src_buf = cl.Buffer(self.ctx, cl.mem_flags.READ_WRITE, self.src_buf_size*4)
 
         # opencl fifo
         self.inputfifo = in_fifo
@@ -53,12 +62,12 @@ class encoder():
 
     def encode(self):
         # copy data from fifo
-        self.inputfifo.pop(self.src_buf,188*8)
+        self.inputfifo.pop(self.src_buf,self.src_buf_size)
         self.cl_thread_lock.acquire()
-        #self.program.run(self.queue, (8,), None, src_buf, dest_buf)
+        #self.program.run(self.queue, (self.batchsize,), None, src_buf, dest_buf)
         self.kernel1.set_args(self.src_buf, self.dest_buf)
-        cl.enqueue_nd_range_kernel(self.queue,self.kernel1,(8,),None )
+        cl.enqueue_nd_range_kernel(self.queue,self.kernel1,(self.batchsize,),None )
         self.cl_thread_lock.release()
         # write data to fifo
-        self.outputfifo.append(self.dest_buf,204*8)
+        self.outputfifo.append(self.dest_buf,self.dest_buf_size)
 
