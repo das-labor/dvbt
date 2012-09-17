@@ -162,6 +162,8 @@ class mapper():
     def create_skeletons(self):
         # for every frame
         print "precalculate all skeletons"
+        self.generate_scatteredpilots_array()
+        self.cl_thread_lock.acquire()
         for f in range(0,4):
             print "frame %d" % f
             self.tps_pilots = tps(self.globalsettings,f)
@@ -171,28 +173,33 @@ class mapper():
                  # generate a new symbol
                  self.create_symbol_skeleton(i,self.tps_pilots.get_next())
                  tmp = numpy.array(self.mappedsymbols, dtype=numpy.complex64)
-                 self.cl_thread_lock.acquire()
                  newbuf = cl.Buffer(self.ctx , cl.mem_flags.READ_ONLY, size=8*self.globalsettings.odfmcarriers)
                  cl.enqueue_copy(self.queue, newbuf, tmp)
-                 self.cl_thread_lock.release()
-
                  self.skeleton_opencl_buffers.append(newbuf)
                  self.mappedsymbols = []
 
+        self.cl_thread_lock.release()
+
     # input the current symbol [0,67], fills the scatteredpilots array with data
-    def scatteredpilots_generate_array(self, symbol_index):
-        self.p = 0
-        self.k = 0
-        self.scatteredpilots = []
-        while self.k < self.globalsettings.odfmcarriers:
-            self.k = 0 + 3 * (symbol_index % 4) + 12 * self.p
-            self.p += 1
-            self.scatteredpilots.append(self.k)
+    def get_scatteredpilots_array(self, symbol_index):
+        return self.scatteredpilots[symbol_index % 4]
+
+    # generate 4 scatteredpilots arrays
+    def generate_scatteredpilots_array(self):
+        for i in range(0,4):
+            self.p = 0
+            self.k = 0
+            sc = []
+            while self.k < self.globalsettings.odfmcarriers:
+                self.k = 0 + 3 * (i % 4) + 12 * self.p
+                self.p += 1
+                sc.append(self.k)
+            self.scatteredpilots.append(sc)
 
     # generates a new mappedsymbols array with: scattered-pilots, continual-pilots, tps-pilots
     def create_symbol_skeleton(self, symbol_index, tps_bit):
         # create the scatteredpilots array
-        self.scatteredpilots_generate_array(symbol_index)
+        self.sc = self.get_scatteredpilots_array(symbol_index)
 
         # this one generates the pbrs sequence for pilots, reinit on each new ofdm symbol
         self.pbrs = pbrs()
@@ -220,7 +227,7 @@ class mapper():
                     self.tmp = complex(4.0 / 3.0, 0)
                 self.mappedsymbols.append(self.tmp)
 
-            elif self.scatteredpilots.count(i) > 0:
+            elif self.sc.count(i) > 0:
                 if self.wk == 1:
                     self.tmp = complex(-4.0 / 3.0, 0)
                 else:
