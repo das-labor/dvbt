@@ -155,6 +155,67 @@ class test_bench():
     def test_stop(self):
         self.thread_event.set()
 
+    def test_reedsolomon(self):
+        print "test_reedsolomon:"
+        testcycles = 0
+        self.fd_input = open('test_bench_rs_input.csv', 'r')
+        self.fd_output = open('test_bench_rs_output.csv', 'r')
+
+        for line in self.fd_input:
+            data_to_encode = numpy.fromstring(line, dtype=numpy.uint8, sep=",").tostring()
+            data_to_encode = numpy.fromstring(data_to_encode, dtype=numpy.uint32)
+
+            encoded_data = numpy.array(numpy.zeros(51), dtype=numpy.uint32)
+            reference_data = numpy.fromstring(self.fd_output.readline(), dtype=numpy.uint8, sep=",")
+
+            # opencl buffer uint
+            self.inputbuffer = cl.Buffer(self.ctx , cl.mem_flags.READ_WRITE, size=48*4)
+            # opencl buffer uint
+            self.outputbuffer = cl.Buffer(self.ctx , cl.mem_flags.READ_WRITE, size=51*4)
+
+            kernel = tb.load_kernel("outer_coding.cl", "test_rsencode")
+
+            cl.enqueue_copy(self.queue, self.inputbuffer, data_to_encode).wait()
+            kernel.set_args(self.inputbuffer, self.outputbuffer)
+            cl.enqueue_nd_range_kernel(self.queue,kernel,(1,),None ).wait()
+            cl.enqueue_copy(self.queue, encoded_data, self.outputbuffer).wait()
+            #print encoded_data.astype(numpy.uint8)
+            if numpy.array_equal(numpy.fromstring(reference_data.tostring(), dtype=numpy.uint32), encoded_data):
+                testcycles += 1
+                print "Test PASS"
+            else:
+                print "Test FAIL"
+                print "input data:"
+                print numpy.fromstring(data_to_encode.tostring(), dtype=numpy.uint8)
+                print "encoded data:"
+                print numpy.fromstring(encoded_data.tostring(), dtype=numpy.uint8)
+                print "reference data:"
+                print reference_data
+
+        if testcycles == 49:
+            print "All tests PASS\n"
+        else:
+            print "more than one test FAILED\n"
+        self.fd_input.close()
+        self.fd_output.close()
+
+    def test_energydispersal(self):
+        print "test_energydispersal:"
+        # opencl buffer uint
+        self.inputbuffer = cl.Buffer(self.ctx , cl.mem_flags.READ_WRITE, size=48*4)
+        # opencl buffer uint
+        self.outputbuffer = cl.Buffer(self.ctx , cl.mem_flags.READ_WRITE, size=48*4)
+
+        kernel = tb.load_kernel("outer_coding.cl", "test_ed")
+        data_to_encode = numpy.random.random_integers(0,255,48).astype(numpy.uint32)
+        data_to_decode = numpy.empty_like(data_to_encode)
+        print data_to_encode.astype(numpy.uint8)
+        cl.enqueue_copy(self.queue, self.inputbuffer, data_to_encode).wait()
+        kernel.set_args(self.inputbuffer, self.outputbuffer)
+        cl.enqueue_nd_range_kernel(self.queue,kernel,(1,),None ).wait()
+        cl.enqueue_copy(self.queue, data_to_decode, self.outputbuffer).wait()
+        print data_to_decode.astype(numpy.uint8)
+
     def test_signalmapping(self):
         print "test_signalmapping:"
         # opencl buffer uint
@@ -242,6 +303,10 @@ class test_bench():
                 if testarray[i*2+1][j] == data_to_decode[j+10]:
                     passed += 1
         print "%d pass out of 100" % passed
+        if passed == 100:
+            print "Test PASS"
+        else:
+            print "Test FAIL"
 
     def load_kernel(self, filename, kernelname):
         print "Kernel \"%s\" from file \"%s\" :" % (kernelname,filename)
@@ -258,6 +323,7 @@ class test_bench():
         return cl.Kernel(self.program,kernelname)
 
 if __name__ == '__main__':
+    test_algorithm = 0
     for any_platform in cl.get_platforms():
         for found_device in any_platform.get_devices():
             if found_device.type == 4 :
@@ -267,13 +333,18 @@ if __name__ == '__main__':
             #print "max_work_group_size: %d" % found_device.max_work_group_size
             # for each compute unit
             tb = test_bench(found_device, 15)
-            tb.test_fifo()
+            if test_algorithm == 0:
+                tb.test_fifo()
+                tb.test_energydispersal()
+                tb.test_reedsolomon()
+                test_algorithm = 1
+
             #tb.test_execution_time(1)
             #tb.test_execution_time(2)
             #tb.test_execution_time(3)
             #tb.test_execution_time(4)
-            tb.test_execution_time(5)
-            tb.test_execution_time(6)
+            #tb.test_execution_time(5)
+            #tb.test_execution_time(6)
 
             
 
