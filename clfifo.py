@@ -72,9 +72,11 @@ class Fifo:
         self.thread_lock.acquire()
 
         self.cl_thread_lock.acquire()
-
         # read data from the beginning of the buffer
-        popevent = cl.enqueue_copy(self.queue, clbuffer, self.cl_fifo_bufferA, byte_count=size, src_offset=0, dest_offset=0)
+        if self.active_buffer == 0:
+            popevent = cl.enqueue_copy(self.queue, clbuffer, self.cl_fifo_bufferA, byte_count=size, src_offset=0, dest_offset=0)
+        else:
+            popevent = cl.enqueue_copy(self.queue, clbuffer, self.cl_fifo_bufferB, byte_count=size, src_offset=0, dest_offset=0)
 
         self.fifo_buffer_length -= size
 
