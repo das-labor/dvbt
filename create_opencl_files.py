@@ -30,7 +30,33 @@ class file_creator():
             self.create_pbrs(f)
             self.create_rs_encoder(f)
             self.create_outer_interleaver(f)
-            f.write("}\n")
+            f.write("}\n\n")
+
+            f.write("__kernel void test_ed( __global uint *in, __global uint *out)\n{\n")
+            f.write("uint workingreg[64];\nint pbrs_index = get_global_id(0);\nint dimN = pbrs_index*47;\n")
+            self.create_pbrs(f)
+            for i in range(0,47):
+                f.write("out[%d] = workingreg[%d];\n" % (i,i))
+            f.write("}\n\n")
+
+            f.write("__kernel void test_rsencode( __global uint *in, __global uint *out)\n{\n")
+            f.write("uint workingreg[64];\nulong rs_shift_reg[4];\nint b,o,p,i;\n")
+            for i in range(0,47):
+                f.write("workingreg[%d] = in[%d];\n" % (i,i))
+            for i in range(0,17):
+                f.write("workingreg[%d] = 0;\n" % (47+i))
+
+            self.create_rs_encoder(f)
+            for i in range(0,51):
+                f.write("out[%d] = workingreg[%d];\n" % (i,i))
+            f.write("}\n\n")
+
+            f.write("__kernel void test_oi( __global uint *in, __global uint *out)\n{\n")
+            f.write("uint workingreg[64];\nint pbrs_index = 0;\nint dimN = pbrs_index*47;\n")
+            for i in range(0,51):
+                f.write("workingreg[%d] = in[%d];\n" % (i,i))
+            self.create_outer_interleaver(f)
+            f.write("}\n\n")
             f.close()
 
         if not os.path.isfile("symbol_interleaver_mapper.cl"):
@@ -52,6 +78,8 @@ class file_creator():
             f.write(copyright)
             self.create_guardinterval(f)
             f.close()
+
+        return
         #if not os.path.isfile("fft_mapper.cl"):
             #print "fft_mapper.cl doesn't exist ! creating file ..."
             #f = open('fft_mapper.cl', 'w')
