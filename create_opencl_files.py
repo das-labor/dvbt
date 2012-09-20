@@ -25,28 +25,29 @@ class file_creator():
             print "outer_coding.cl doesn't exist ! creating file ..."
             f = open('outer_coding.cl', 'w')
             f.write(copyright)
+            self.create_rs_helper_func(f)
             f.write("/* input mpeg-ts packets, each packet has 188bytes\nnumpy converts to input data stream to this format\nwhere uint is 0xAaBbCcDd\n0: Dd\n1: Cc\n2: Bb\n3: Aa\n...\n\nthe output has reverse alignment\nwhere uint is 0xAaBbCcDd\n0: Aa\n1: Bb\n2: Cc\n3: Dd\n...\n\nThis is needed for inner-coding, as the uint can be shifted bitwise left\n\n*/\n\n")
-            f.write("__kernel void run( __global uint *in, __global uint *out)\n{\nuint workingreg[64];\nulong rs_shift_reg[4];\nint b,o,p,i;\nint pbrs_index = get_global_id(0);\nint dimN = pbrs_index*47;\n")
+            f.write("__kernel void run( __global uint *in, __global uint *out)\n{\n")
+            f.write("uint workingreg[51];\nint pbrs_index = get_global_id(0);\nint dimN = pbrs_index*47;\n")
             self.create_pbrs(f)
             self.create_rs_encoder(f)
             self.create_outer_interleaver(f)
             f.write("}\n\n")
 
             f.write("__kernel void test_ed( __global uint *in, __global uint *out)\n{\n")
-            f.write("uint workingreg[64];\nint pbrs_index = get_global_id(0);\nint dimN = pbrs_index*47;\n")
+            f.write("uint workingreg[51];\nint pbrs_index = get_global_id(0);\nint dimN = pbrs_index*47;\n")
+
             self.create_pbrs(f)
             for i in range(0,47):
                 f.write("out[%d] = workingreg[%d];\n" % (i,i))
             f.write("}\n\n")
 
             f.write("__kernel void test_rsencode( __global uint *in, __global uint *out)\n{\n")
-            f.write("uint workingreg[64];\nulong rs_shift_reg[4];\nint b,o,p,i;\n")
+            f.write("uint workingreg[51];\n")
             for i in range(0,47):
                 f.write("workingreg[%d] = in[%d];\n" % (i,i))
-            for i in range(0,17):
-                f.write("workingreg[%d] = 0;\n" % (47+i))
-
             self.create_rs_encoder(f)
+
             for i in range(0,51):
                 f.write("out[%d] = workingreg[%d];\n" % (i,i))
             f.write("}\n\n")
@@ -197,98 +198,70 @@ class file_creator():
     # rs -generator polynomial
     #
     # 1x16+	59x15+	13x14+	104x13+	189x12+	68x11+	209x10+	30x9+	8x8+	163x7+	65x6+	41x5+	229x4+	98x3+	50x2+	36x1+	59x0
+    # in hex:
+    # 3B 0D 68 BD 44 D1 1E 08 A3 41 29 E5 62 32 24 3B
+    # reverse: 3B 24 32 62 E5 29 41 A3 08 1E D1 44 BD 68 0D 3B
     # optimized for 64bit systems
     # gf init poly = x^8 + x^4 +x^3+x^2 + 1
     def create_rs_encoder(self, f):
-        a_init_1 = 0xA34129E56232243B
-        a_init_2 = 0x3B0D68BD44D11E08
-        cnt = 0
-        a = a_init_1
-        poly = 0x1d
-        rega = a_init_1
-        f.write("rs_shift_reg[2] = 0;\n")
-        f.write("rs_shift_reg[3] = 0;\n\no = 0;\n")
-        f.write("/* do a rs(255,236,8) reed-solomon encoding */\n")
-        f.write("/* this function takes 64 uints ( 255 bytes ) */\n")
-        f.write("/* it generates 16 error correcting bytes */\n")
-        f.write(" for(i = 0; i < 255; i++)\n{\n")
-        f.write("\tb = (workingreg[i / 4]>>((i%4)*8))&0x000000ff;\n")
-        f.write("\tb ^= o;\n") 
 
-        while cnt < 8:
-            #f.write( "/* %d */\n" % cnt)
-            f.write("\trs_shift_reg[0] ^= ((long)(b & 0x01)* 0x%016xUL);\n" % a )
-    
-            rega = 0
-            if ((a>>56) & 0x80) > 0:
-                rega |=(poly<<56);
-            if ((a>>48) & 0x80) > 0:
-                rega |=(poly<<48);
-            if ((a>>40) & 0x80) > 0:
-                rega |=(poly<<40);
-            if ((a>>32) & 0x80) > 0:
-                rega |=(poly<<32);
-            if ((a>>24) & 0x80) > 0:
-                rega |=(poly<<24);
-            if ((a>>16) & 0x80) > 0:
-                rega |=(poly<<16);
-            if ((a>>8) & 0x80) > 0:
-                rega |=(poly<<8);
-            if ((a>>0) & 0x80) > 0:
-                rega |=(poly<<0);
-  
-            a &= 0x7f7f7f7f7f7f7f7f
-            a <<= 1
-            a ^= rega
+        f.write("uint wreg[17];\n")
+        f.write("const uchar gen_poly[16]={0x3B, 0x0D, 0x68, 0xBD, 0x44, 0xD1, 0x1E, 0x08, 0xA3, 0x41, 0x29, 0xE5, 0x62, 0x32, 0x24, 0x3B};\n")
 
-            f.write("\tb >>= 1;\n")
-            cnt += 1
-
-        f.write("\tb = (workingreg[i / 4]>>((i%4)*8))&0x000000ff;\n")
-        f.write("\tb ^= o;\n") 
-        cnt = 0
-        a = a_init_2
-        while cnt < 8:
-            #f.write("/* %d */\n" % cnt)
-            f.write("\trs_shift_reg[1] ^= ((long)(b & 0x01)* 0x%016xUL);\n" % a )
-    
-            rega = 0
-            if ((a>>56) & 0x80) > 0:
-                rega |=(poly<<56);
-            if ((a>>48) & 0x80) > 0:
-                rega |=(poly<<48);
-            if ((a>>40) & 0x80) > 0:
-                rega |=(poly<<40);
-            if ((a>>32) & 0x80) > 0:
-                rega |=(poly<<32);
-            if ((a>>24) & 0x80) > 0:
-                rega |=(poly<<24);
-            if ((a>>16) & 0x80) > 0:
-                rega |=(poly<<16);
-            if ((a>>8) & 0x80) > 0:
-                rega |=(poly<<8);
-            if ((a>>0) & 0x80) > 0:
-                rega |=(poly<<0);
-  
-            a &= 0x7f7f7f7f7f7f7f7f
-            a <<= 1
-            a ^= rega
-
-            f.write("\tb >>= 1;\n")
-            cnt += 1
-
-        f.write("\to = (rs_shift_reg[3]&0xff00000000000000UL)>>56;\n") 
-        f.write("\tp = (rs_shift_reg[2]&0xff00000000000000UL)>>56;\n") 
-        f.write("\trs_shift_reg[2] <<= 8;\n") 
-        f.write("\trs_shift_reg[3] <<= 8;\n") 
-        f.write("\trs_shift_reg[3] |= p;\n") 
-        f.write("\trs_shift_reg[2] ^= rs_shift_reg[0];\n") 
-        f.write("\trs_shift_reg[3] ^= rs_shift_reg[1];\n}\n\n") 
+        f.write("int i,j;\n")
+        f.write("/* load data into wreg */\n")
+        f.write("for(i = 0; i < 16; i++)\n")
+        f.write("{\n")
+        f.write("\twreg[i]= (workingreg[i>>2]>>((i&0x00000003)<<3))&0x000000ff;\n")
+        f.write("}\n")
+        f.write("for(i = 0; i < 172; i++)\n")
+        f.write("{\n")
+        f.write("\t/* load new byte into wreg[16] */\n")
+        f.write("\twreg[16]=workingreg[(i+16)>>2];\n")
+        f.write("\twreg[16]>>=((i+16)&0x00000003)<<3;\n")
+        f.write("\twreg[16]&=0x000000ff;\n")
+        f.write("\tfor(j = 0; j<16;j++){\n")
+        f.write("\twreg[j+1]^=galoisMultiplication_arith(wreg[0],gen_poly[j]);\n")
+        f.write("\t}\n")
+        f.write("\t/* shift all bytes left */\n")
+        f.write("\tfor(j = 0; j<16;j++){\n")
+        f.write("\t\twreg[j]=wreg[j+1];\n")
+        f.write("\t}\n")
+        f.write("}\n\n")
+        f.write("for(i = 0; i < 16; i++)\n")
+        f.write("{\n")
+        f.write("\twreg[16]=0;\n")
+        f.write("\tfor(j = 0; j<16;j++){\n")
+        f.write("\t\twreg[j+1]^=galoisMultiplication_arith(wreg[0],gen_poly[j]);\n")
+        f.write("\t}\n")
+        f.write("\tfor(j = 0; j<16;j++){\n")
+        f.write("\t\twreg[j]=wreg[j+1];\n")
+        f.write("\t}\n")
+        f.write("}\n")
         f.write("/* convert back to uint32 */\n") 
-        f.write("workingreg[47] = (rs_shift_reg[2]&0x00000000ffffffffUL);\n") 
-        f.write("workingreg[48] = (rs_shift_reg[2]&0xffffffff00000000UL)>>32;\n") 
-        f.write("workingreg[49] = (rs_shift_reg[3]&0x00000000ffffffffUL);\n") 
-        f.write("workingreg[50] = (rs_shift_reg[3]&0xffffffff00000000UL)>>32;\n\n") 
+        f.write("workingreg[47] = (wreg[3]<<24)|(wreg[2]<<16)|(wreg[1]<<8)|wreg[0];\n") 
+        f.write("workingreg[48] = (wreg[7]<<24)|(wreg[6]<<16)|(wreg[5]<<8)|wreg[4];\n") 
+        f.write("workingreg[49] = (wreg[11]<<24)|(wreg[10]<<16)|(wreg[9]<<8)|wreg[8];\n") 
+        f.write("workingreg[50] = (wreg[15]<<24)|(wreg[14]<<16)|(wreg[13]<<8)|wreg[12];\n\n") 
+
+    def create_rs_helper_func(self,f):
+        f.write("\n/* galois field multiply helper function,this is faster than 2x 256 uint lookup table */\n")
+        f.write("uint galoisMultiplication_arith(uint a, uint b)\n")
+        f.write("{\n")
+        f.write("\tuint p = 0;\n")
+        f.write("\tuint temp = 0;\n")
+        f.write("\tfor(int i = 0; i < 8; i++)\n")
+        f.write("\t{\n")
+        f.write("\t\ttemp = 8 - ((b & 0x00000001)<<3);\n")
+        f.write("\t\tp ^= (a>>temp);\n")
+        f.write("\t\ttemp = 8- ((a & 0x00000080)>>4);\n")
+        f.write("\t\ta <<= 1;\n")
+        f.write("\t\ta &= 0x000000ff;\n")
+        f.write("\t\ta ^= (0x0000001d>>temp);\n")
+        f.write("\t\tb >>= 1;\n")
+        f.write("\t}\n")
+        f.write("\treturn p;\n")
+        f.write("}\n\n")
 
     def create_pbrs(self, f):
         j = 0
@@ -326,9 +299,7 @@ class file_creator():
             f.write("\t\tbreak;\n")
 
         f.write("}\n\n")
-        f.write("/* fill with zeros */\n")
-        for i in range(0,17):
-	    f.write("workingreg[%d] = 0;\n" % (47+i))
+
         f.write("\n")
 
     def create_signal_constellation(self, f):
