@@ -79,51 +79,54 @@ class file_creator():
             f.write(copyright)
             self.create_guardinterval(f)
             f.close()
-
-        return
-        #if not os.path.isfile("fft_mapper.cl"):
-            #print "fft_mapper.cl doesn't exist ! creating file ..."
-            #f = open('fft_mapper.cl', 'w')
-            #f.write(copyright)
-            #self.create_mapper(f,0,6817)
-            #self.create_mapper(f,1,6817)
-            #self.create_mapper(f,2,6817)
-            #self.create_mapper(f,3,6817)
-            #self.create_mapper(f,0,1704)
-            #self.create_mapper(f,1,1704)
-            #self.create_mapper(f,2,1704)
-            #self.create_mapper(f,3,1704)
-            #f.close()
-        #if not os.path.isfile("signal_constellation.cl"):
-            #print "signal_constellation.cl doesn't exist ! creating file ..."
-            #f = open('signal_constellation.cl', 'w')
-            #f.write(copyright)
-            #self.create_signal_constellation(f)
-            #f.close()
         if not os.path.isfile("inner_coding.cl"):
             print "inner_coding.cl doesn't exist ! creating file ..."
             f = open('inner_coding.cl', 'w')
             f.write(copyright)
             self.create_inner_coder(f)
             f.close()
-        #if not os.path.isfile("symbol_interleaver.cl"):
-            #print "symbol_interleaver.cl doesn't exist ! creating file ..."
-            #f = open('symbol_interleaver.cl', 'w')
-            #f.write(copyright)
-            #self.create_symbol_interleaver(f)
-            #f.close()
-       # if not os.path.isfile("symbol_interleaverA.cl"):
-            #print "symbol_interleaverA.cl doesn't exist ! creating file ..."
-            #f = open('symbol_interleaverA.cl', 'w')
-            #f.write(copyright)
-            #self.create_symbol_interleaverA(f)
-            #f.close()
-        #if not os.path.isfile("symbol_interleaverB.cl"):
-            #print "symbol_interleaverB.cl doesn't exist ! creating file ..."
-            #f = open('symbol_interleaverB.cl', 'w')
-            #f.write(copyright)
-            #self.create_symbol_interleaverB(f)
-            #f.close()
+
+        return
+
+
+
+        if not os.path.isfile("fft_mapper.cl"):
+            print "fft_mapper.cl doesn't exist ! creating file ..."
+            f = open('fft_mapper.cl', 'w')
+            f.write(copyright)
+            self.create_mapper(f,0,6817)
+            self.create_mapper(f,1,6817)
+            self.create_mapper(f,2,6817)
+            self.create_mapper(f,3,6817)
+            self.create_mapper(f,0,1704)
+            self.create_mapper(f,1,1704)
+            self.create_mapper(f,2,1704)
+            self.create_mapper(f,3,1704)
+            f.close()
+        if not os.path.isfile("signal_constellation.cl"):
+            print "signal_constellation.cl doesn't exist ! creating file ..."
+            f = open('signal_constellation.cl', 'w')
+            f.write(copyright)
+            self.create_signal_constellation(f)
+            f.close()
+        if not os.path.isfile("symbol_interleaver.cl"):
+            print "symbol_interleaver.cl doesn't exist ! creating file ..."
+            f = open('symbol_interleaver.cl', 'w')
+            f.write(copyright)
+            self.create_symbol_interleaver(f)
+            f.close()
+        if not os.path.isfile("symbol_interleaverA.cl"):
+            print "symbol_interleaverA.cl doesn't exist ! creating file ..."
+            f = open('symbol_interleaverA.cl', 'w')
+            f.write(copyright)
+            self.create_symbol_interleaverA(f)
+            f.close()
+        if not os.path.isfile("symbol_interleaverB.cl"):
+            print "symbol_interleaverB.cl doesn't exist ! creating file ..."
+            f = open('symbol_interleaverB.cl', 'w')
+            f.write(copyright)
+            self.create_symbol_interleaverB(f)
+            f.close()
     
     # input: file descriptor, 0-3, usefulcarriers
     def create_mapper(self, f, symbol_index, usefulcarriers):
@@ -198,7 +201,6 @@ class file_creator():
     # 1x16+	59x15+	13x14+	104x13+	189x12+	68x11+	209x10+	30x9+	8x8+	163x7+	65x6+	41x5+	229x4+	98x3+	50x2+	36x1+	59x0
     # in hex:
     # 3B 0D 68 BD 44 D1 1E 08 A3 41 29 E5 62 32 24 3B
-    # reverse: 3B 24 32 62 E5 29 41 A3 08 1E D1 44 BD 68 0D 3B
     # optimized for 64bit systems
     # gf init poly = x^8 + x^4 +x^3+x^2 + 1
     def create_rs_encoder(self, f):
