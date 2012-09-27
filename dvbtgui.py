@@ -15,6 +15,7 @@
 
 import wx
 import pyopencl as cl
+import pyglet
 
 class MainPanel(wx.Panel):
     def __init__(self, parent, globalsettings,eventstart,eventstop,lock):
@@ -118,22 +119,42 @@ class MainPanel(wx.Panel):
                  if found_device.type == 2 :
                     self.computedeviceList.append("CPU: %s" % found_device.name)
         except ValueError:
-           self.computedeviceList.append("Error, opencl isn't available")
+           print "Error, opencl isn't available"
+           return
 
 	# the combobox compute devices
-        self.editcomputedevice = wx.ComboBox(self, pos=(220, 400), size=(300, -1), choices=self.computedeviceList, style=wx.CB_READONLY, value="")
+        self.editcomputedevice = wx.ComboBox(self, pos=(220, 400), size=(300, -1), choices=self.computedeviceList, style=wx.CB_READONLY, value=self.computedeviceList[0])
         self.Bind(wx.EVT_COMBOBOX, self.EvtComboBoxcomputedevice, self.editcomputedevice)
  
         # label radiosettings
         self.lblradio = wx.StaticText(self, label="radio settings:", pos=(20, 420))
 
         # label channel list
-        self.lblchannel = wx.StaticText(self, label="UHF channel:", pos=(10, 440))
+        self.lblchannel = wx.StaticText(self, label="UHF channel:", pos=(10, 450))
 
 	# the combobox channel list
         self.editchannellist = wx.ComboBox(self, pos=(220, 440), size=(300, -1), choices=self.channelarray, style=wx.CB_READONLY, value="60	786Mhz")
         self.Bind(wx.EVT_COMBOBOX, self.EvtComboBoxchannellist, self.editchannellist)
 
+        # label X displays
+        self.lblX11displays = wx.StaticText(self, label="X11 displays:", pos=(10, 490))
+
+	# the combobox channel list
+        self.x11displays = []
+        platform = pyglet.window.get_platform()
+        #display = platform.get_default_display()
+        for displaystring in [':0.0',':0.1',':0.2']:
+            try:
+                display = platform.get_display(displaystring)
+                for screen in display.get_screens():
+                    self.x11displays.append("%s" % screen)
+            except:
+                break
+        if len(self.x11displays) == 0:
+           print "Error, no X11 display found"
+           return
+        self.editx11displays = wx.ComboBox(self, pos=(220, 480), size=(400, -1), choices=self.x11displays, style=wx.CB_READONLY, value=self.x11displays[0])
+        self.Bind(wx.EVT_COMBOBOX, self.EvtComboBoxchannellist, self.editx11displays)
 
 
         self.Bind(wx.EVT_CLOSE, self.EvtClose)
@@ -267,7 +288,7 @@ class MainPanel(wx.Panel):
 
 def gui(globalsettings,eventstart,eventstop,lock):
     app = wx.App(False)
-    frame = wx.Frame(None,-1,"Main Control",size = (650, 500))
+    frame = wx.Frame(None,-1,"Main Control",size = (650, 550))
     panel = MainPanel(frame,globalsettings,eventstart,eventstop,lock)
     frame.Show()
     app.MainLoop()
