@@ -154,7 +154,7 @@ class MainPanel(wx.Panel):
            print "Error, no X11 display found"
            return
         self.editx11displays = wx.ComboBox(self, pos=(220, 480), size=(400, -1), choices=self.x11displays, style=wx.CB_READONLY, value=self.x11displays[0])
-        self.Bind(wx.EVT_COMBOBOX, self.EvtComboBoxchannellist, self.editx11displays)
+        self.Bind(wx.EVT_COMBOBOX, self.Evtx11displays, self.editx11displays)
 
 
         self.Bind(wx.EVT_CLOSE, self.EvtClose)
@@ -218,7 +218,10 @@ class MainPanel(wx.Panel):
     def EvtComboBoxchannellist(self, event):
         #self.globalsettings.computedevice = event.GetString().split(':')[1].strip()
         self.logger.AppendText("new radio settings: %s\n" % event.GetString())
-        #self.updateGlobalSettings()
+
+    def Evtx11displays(self, event):
+        self.globalsettings.x11displaystring = event.GetString()
+        self.logger.AppendText("new X11 screen selected : %s\n" % event.GetString())
 
     def EvtComboBoxcomputedevice(self, event):
        self.globalsettings.computedevice = event.GetString().split(':')[1].strip()
