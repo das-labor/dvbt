@@ -156,42 +156,40 @@ class file_creator():
 
     # input: file descriptor
     def create_outer_interleaver(self, f):
-        fifo = [[],[-1],[-1,-1],[-1,-1,-1],[-1,-1,-1,-1],[-1,-1,-1,-1,-1],[-1,-1,-1,-1,-1,-1],[-1,-1,-1,-1,-1,-1,-1],[-1,-1,-1,-1,-1,-1,-1,-1],[-1,-1,-1,-1,-1,-1,-1,-1,-1],[-1,-1,-1,-1,-1,-1,-1,-1,-1,-1],[-1,-1,-1,-1,-1,-1,-1,-1,-1,-1,-1]]
+        fifo = [[],[],[],[],[],[],[],[],[],[],[],[]]
+        for i in range(0,12):
+            for j in range(0,i):
+                fifo[i].append(-1)
         in_a = list(xrange(204))
-        out = []
-        out_cnt = 0
+        output_array = []
         pointer = 0
 
         f.write("/* interleave the 204 bytes packet */\n")
         f.write("dimN = pbrs_index*51;\n")
-        while out_cnt < 204:
-            if len(in_a):
-                y = in_a.pop(0)
+        while len(output_array) < 204:
+            if len(fifo[pointer]) == 0:
+                if len(in_a) > 0:
+                    output_array.append(in_a.pop(0))
             else:
-                y = -1
-            if pointer == 0:
-                if not y == -1:
-                    out.append(y)
-                    out_cnt += 1
-            else:
-                if len(fifo[pointer]):
-                    r = fifo[pointer].pop(0)
+                pop_data = fifo[pointer].pop(0)
+                if pop_data != -1:
+                    output_array.append(pop_data)
+                if len(in_a) > 0:
+                    fifo[pointer].append(in_a.pop(0))
                 else:
-                    r = -1
-                if not r == -1:
-                    out.append(r)
-                    out_cnt += 1
-                fifo[pointer].append(y)
-            pointer += 1
-            if pointer == 11:
-                pointer = 0
+                    fifo[pointer].append(-1)
 
-        #for i in range(0,204):
-            #print "out[%d] = %d\n" % (i , out[i])
+            pointer +=1
+            pointer %= 12
+            print fifo
+            print "\n"
+
+        for i in range(0,204):
+            print "out[%d] = %d\n" % (i , output_array[i])
 
         out_cnt = 0
         for i in range(0,51):
-            f.write("out[dimN+%d] = (((workingreg[%d]>>%d)&0x000000ff)<<24)|(((workingreg[%d]>>%d)&0x000000ff)<<16)|(((workingreg[%d]>>%d)&0x000000ff)<<8)|((workingreg[%d]>>%d)&0x000000ff);\n" % (i, out[i*4+0]/4,(out[i*4+0]%4)*8,out[i*4+1]/4,(out[i*4+1]%4)*8,out[i*4+2]/4,(out[i*4+2]%4)*8,out[i*4+3]/4,(out[i*4+3]%4)*8))
+            f.write("out[dimN+%d] = (((workingreg[%d]>>%d)&0x000000ff)<<24)|(((workingreg[%d]>>%d)&0x000000ff)<<16)|(((workingreg[%d]>>%d)&0x000000ff)<<8)|((workingreg[%d]>>%d)&0x000000ff);\n" % (i, output_array[i*4+0]/4,(output_array[i*4+0]%4)*8,output_array[i*4+1]/4,(output_array[i*4+1]%4)*8,output_array[i*4+2]/4,(output_array[i*4+2]%4)*8,output_array[i*4+3]/4,(output_array[i*4+3]%4)*8))
     
 
     # input: file descriptor
