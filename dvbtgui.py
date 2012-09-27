@@ -15,7 +15,6 @@
 
 import wx
 import pyopencl as cl
-import ffmpeg
 
 class MainPanel(wx.Panel):
     def __init__(self, parent, globalsettings,eventstart,eventstop,lock):
@@ -29,7 +28,7 @@ class MainPanel(wx.Panel):
         self.globalsettings.coderate = 0.5
         self.globalsettings.odfmmode = 8192
         self.globalsettings.odfmcarriers = 6817
-        self.globalsettings.odfmuseablecarriers = (self.globalsettings.odfmcarriers - 809)
+        self.globalsettings.odfmuseablecarriers = 6048
         self.globalsettings.guardinterval = 0.25
         self.globalsettings.modulation = 2
         self.globalsettings.alpha = 1
@@ -160,10 +159,10 @@ class MainPanel(wx.Panel):
     def EvtComboBoxofdmmode(self, event):
         if event.GetString() == "8K mode":
             self.globalsettings.odfmmode = 8192
-            self.globalsettings.odfmuseablecarriers = (6817 - 809)
+            self.globalsettings.odfmuseablecarriers = 6048
         if event.GetString() == "2K mode":
             self.globalsettings.odfmmode = 2048
-            self.globalsettings.odfmuseablecarriers = (1704 - 203)
+            self.globalsettings.odfmuseablecarriers = 1512
         self.updateGlobalSettings()
 
     def EvtComboBoxchannelbandwidth(self, event):
