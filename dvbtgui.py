@@ -16,27 +16,24 @@
 import wx
 import pyopencl as cl
 import pyglet
+import DVBT
 
 class MainPanel(wx.Panel):
-    def __init__(self, parent, globalsettings,eventstart,eventstop,lock):
+    def __init__(self, parent):
         wx.Panel.__init__(self, parent)
-	self.globalsettings = globalsettings
         self.lblOFDMsettings = wx.StaticText(self, label="OFDM settings:", pos=(20, 20))
-        self.eventstart = eventstart
-        self.eventstop = eventstop
-        self.lock = lock
-        self.globalsettings.bandwidth = 8.0
-        self.globalsettings.coderate = 0.5
-        self.globalsettings.odfmmode = 8192
-        self.globalsettings.odfmcarriers = 6817
-        self.globalsettings.odfmuseablecarriers = 6048
-        self.globalsettings.guardinterval = 0.25
-        self.globalsettings.modulation = 2
-        self.globalsettings.alpha = 1
-        self.globalsettings.ffmpegargs = ""
-        self.globalsettings.ffmpeginputfile = ""
-        self.globalsettings.computedevice = ""
-        self.globalsettings.cellid = 0
+        self.bandwidth = 8.0
+        self.coderate = 0.5
+        self.odfmmode = 8192
+        self.odfmcarriers = 6817
+        self.odfmuseablecarriers = 6048
+        self.guardinterval = 0.25
+        self.modulation = 2
+        self.alpha = 1
+        self.ffmpegargs = ""
+        self.ffmpeginputfile = ""
+        self.computedevice = ""
+        self.cellid = 0
 
         self.channelarray = ["21	474Mhz","22	482Mhz","23	490Mhz","24	498Mhz","25	506Mhz","26	514Mhz","27	522Mhz","28	530Mhz","29	538Mhz","30	546Mhz","31	554Mhz","32	562Mhz","33	570Mhz","34	578Mhz","35	586Mhz","36	594Mhz","37	602Mhz","38	610Mhz","39	618Mhz","40	626Mhz","41	634Mhz","42	642Mhz","43	650Mhz","44	658Mhz","45	666Mhz","46	674Mhz","47	682Mhz","48	690Mhz","49	698Mhz","50	706Mhz","51	714Mhz","52	722Mhz","53	730Mhz","54	738Mhz","55	746Mhz","56	754Mhz","57	762Mhz","58	770Mhz","59	778Mhz","60	786Mhz","61	794Mhz","62	802Mhz","63	810Mhz","64	818Mhz","65	826Mhz","66	834Mhz","67	842Mhz","68	850Mhz","69	858Mhz"]
 
@@ -110,20 +107,24 @@ class MainPanel(wx.Panel):
         # label Compute Device
         self.lblcomputedevice = wx.StaticText(self, label="Compute Device:", pos=(10, 400))
 
-        self.computedeviceList = []
-        try:
-           for any_platform in cl.get_platforms():
-              for found_device in any_platform.get_devices():
-                 if found_device.type == 4 :
-                    self.computedeviceList.append("GPU: %s" % found_device.name)
-                 if found_device.type == 2 :
-                    self.computedeviceList.append("CPU: %s" % found_device.name)
-        except ValueError:
-           print "Error, opencl isn't available"
-           return
+        computedeviceList = []
+        clplatformList = []
+
+        for any_platform in cl.get_platforms():
+            clplatformList.append(any_platform.name)
+            for found_device in any_platform.get_devices():
+                if found_device.type == 4 :
+                    computedeviceList.append("GPU: %s" % found_device.name)
+                if found_device.type == 2 :
+                    computedeviceList.append("CPU: %s" % found_device.name)
+            break
+
+	# the combobox cl platform
+        self.editclplatform = wx.ComboBox(self, pos=(220, 370), size=(300, -1), choices=clplatformList, style=wx.CB_READONLY, value=clplatformList[0])
+        self.Bind(wx.EVT_COMBOBOX, self.EvtComboBoxclplatform, self.editclplatform)
 
 	# the combobox compute devices
-        self.editcomputedevice = wx.ComboBox(self, pos=(220, 400), size=(300, -1), choices=self.computedeviceList, style=wx.CB_READONLY, value=self.computedeviceList[0])
+        self.editcomputedevice = wx.ComboBox(self, pos=(220, 400), size=(300, -1), choices=computedeviceList, style=wx.CB_READONLY, value=computedeviceList[0])
         self.Bind(wx.EVT_COMBOBOX, self.EvtComboBoxcomputedevice, self.editcomputedevice)
  
         # label radiosettings
@@ -140,19 +141,19 @@ class MainPanel(wx.Panel):
         self.lblX11displays = wx.StaticText(self, label="X11 displays:", pos=(10, 490))
 
 	# the combobox channel list
-        self.x11displays = []
-        platform = pyglet.window.get_platform()
+        self.x11displays = ['bla']
+        #platform = pyglet.window.get_platform()
         #display = platform.get_default_display()
-        for displaystring in [':0.0',':0.1',':0.2']:
-            try:
-                display = platform.get_display(displaystring)
-                for screen in display.get_screens():
-                    self.x11displays.append("%s" % screen)
-            except:
-                break
-        if len(self.x11displays) == 0:
-           print "Error, no X11 display found"
-           return
+        #for displaystring in [':0.0',':0.1',':0.2']:
+            #try:
+                #display = platform.get_display(displaystring)
+                #for screen in display.get_screens():
+                    #self.x11displays.append("%s" % screen)
+            #except:
+                #break
+        #if len(self.x11displays) == 0:
+           #print "Error, no X11 display found"
+           #return
         self.editx11displays = wx.ComboBox(self, pos=(220, 480), size=(400, -1), choices=self.x11displays, style=wx.CB_READONLY, value=self.x11displays[0])
         self.Bind(wx.EVT_COMBOBOX, self.Evtx11displays, self.editx11displays)
 
@@ -161,122 +162,119 @@ class MainPanel(wx.Panel):
 
         self.updateGlobalSettings()
 
-    def EvtRadioBox(self, event):
-        self.logger.AppendText('EvtRadioBox: %d\n' % event.GetInt())
-
     def EvtComboBoxcoderate(self, event):
         if event.GetString() == "1/2":
-            self.globalsettings.coderate = 0.5
+            self.coderate = 0.5
         if event.GetString() == "2/3":
-            self.globalsettings.coderate = 2.0 / 3.0
+            self.coderate = 2.0 / 3.0
         if event.GetString() == "3/4":
-            self.globalsettings.coderate = 0.75
+            self.coderate = 0.75
         if event.GetString() == "5/6":
-            self.globalsettings.coderate = 5.0 / 6.0
+            self.coderate = 5.0 / 6.0
         if event.GetString() == "7/8":
-            self.globalsettings.coderate = 0.875
+            self.coderate = 0.875
         self.updateGlobalSettings()
 
     def EvtComboBoxofdmmode(self, event):
         if event.GetString() == "8K mode":
-            self.globalsettings.odfmmode = 8192
-            self.globalsettings.odfmuseablecarriers = 6048
+            self.odfmmode = 8192
+            self.odfmuseablecarriers = 6048
         if event.GetString() == "2K mode":
-            self.globalsettings.odfmmode = 2048
-            self.globalsettings.odfmuseablecarriers = 1512
+            self.odfmmode = 2048
+            self.odfmuseablecarriers = 1512
         self.updateGlobalSettings()
 
     def EvtComboBoxchannelbandwidth(self, event):
         if event.GetString() == "8Mhz":
-            self.globalsettings.bandwidth = 8
+            self.bandwidth = 8
         if event.GetString() == "7Mhz":
-            self.globalsettings.bandwidth = 7
+            self.bandwidth = 7
         if event.GetString() == "6Mhz":
-            self.globalsettings.bandwidth = 6
+            self.bandwidth = 6
         self.updateGlobalSettings()
 
     def EvtComboBoxguardinteraval(self, event):
         if event.GetString() == "1/4":
-            self.globalsettings.guardinterval = 0.25
+            self.guardinterval = 0.25
         if event.GetString() == "1/8":
-            self.globalsettings.guardinterval = 0.125
+            self.guardinterval = 0.125
         if event.GetString() == "1/16":
-            self.globalsettings.guardinterval = 0.0625
+            self.guardinterval = 0.0625
         if event.GetString() == "1/32":
-            self.globalsettings.guardinterval = 0.03125
+            self.guardinterval = 0.03125
         self.updateGlobalSettings()
 
     def EvtComboBoxmodulation(self, event):
         if event.GetString() == "QPSK":
-            self.globalsettings.modulation = 2
+            self.modulation = 2
         if event.GetString() == "16-QAM":
-            self.globalsettings.modulation = 4
+            self.modulation = 4
         if event.GetString() == "64-QAM":
-            self.globalsettings.modulation = 6
+            self.modulation = 6
         self.updateGlobalSettings()
 
     def EvtComboBoxchannellist(self, event):
-        #self.globalsettings.computedevice = event.GetString().split(':')[1].strip()
+        #self.computedevice = event.GetString().split(':')[1].strip()
         self.logger.AppendText("new radio settings: %s\n" % event.GetString())
 
     def Evtx11displays(self, event):
-        self.globalsettings.x11displaystring = event.GetString()
+        self.x11displaystring = event.GetString()
         self.logger.AppendText("new X11 screen selected : %s\n" % event.GetString())
 
+    def EvtComboBoxclplatform(self, event):
+       self.clplatform = event.GetString()
+       self.logger.AppendText("Opencl Platform: %s\n" % self.clplatform)
+
     def EvtComboBoxcomputedevice(self, event):
-       self.globalsettings.computedevice = event.GetString().split(':')[1].strip()
-       self.logger.AppendText("Opencl compute device: %s\n" % self.globalsettings.computedevice)
+       self.computedevice = event.GetString().split(':')[1].strip()
+       self.logger.AppendText("Opencl compute device: %s\n" % self.computedevice)
 
     def EvtComboBoxalpha(self, event):
-        self.globalsettings.alpha = int(event.GetString())
+        self.alpha = int(event.GetString())
 
     def OnClickButtonStart(self,event):
-        self.globalsettings.cellid = int(self.editcellID.GetValue())
-        self.eventstart.set()
+        self.cellid = int(self.editcellID.GetValue())
+        self.dvbt_encoder.run()
 
     def OnClickButtonOpen(self,event):
         dialog = wx.FileDialog ( None, style = wx.OPEN )
 	if dialog.ShowModal() == wx.ID_OK:
-   	    self.globalsettings.ffmpeginputfile = dialog.GetPath()
-            self.TextCtrlffmpegfilename.SetValue(self.globalsettings.ffmpeginputfile)
+   	    self.ffmpeginputfile = dialog.GetPath()
+            self.TextCtrlffmpegfilename.SetValue(self.ffmpeginputfile)
 	dialog.Destroy()
 
     #def EvtText(self, event):
         #self.logger.AppendText('EvtText: %s\n' % event.GetString())
 
     def EvtTextffmpegargs(self, event):
-        self.globalsettings.ffmpegargs = event.GetString()
+        self.ffmpegargs = event.GetString()
 
     def EvtClose(self, event):
-        self.eventstop.set()
         self.Destroy()
 
     def EvtCheckBox(self, event):
         self.logger.AppendText('EvtCheckBox: %d\n' % event.Checked())
 
     def updateGlobalSettings(self):
-        self.globalsettings.symbolrate = self.globalsettings.bandwidth * 1000000 / 0.875
-        self.globalsettings.ofdmsymbollengthuseful = (1 / self.globalsettings.symbolrate) * self.globalsettings.odfmmode
-        self.globalsettings.ofdmguardintervallength = (1 / self.globalsettings.symbolrate) * self.globalsettings.odfmmode * self.globalsettings.guardinterval
-        self.globalsettings.ofdmsymbollength = self.globalsettings.ofdmsymbollengthuseful + self.globalsettings.ofdmguardintervallength
-        self.globalsettings.ofdmsymbolspersecond = self.globalsettings.symbolrate / self.globalsettings.odfmmode /  (1 + self.globalsettings.guardinterval)
-        self.globalsettings.ofdmframespersecond = self.globalsettings.ofdmsymbolspersecond / 68
-        # round the usablebitrate reported to ffmpeg
-        self.globalsettings.usablebitrateperodfmsymbol = self.globalsettings.odfmuseablecarriers * self.globalsettings.modulation * self.globalsettings.coderate * 0.921182266
-        self.globalsettings.usablebitrate = self.globalsettings.ofdmsymbolspersecond * self.globalsettings.usablebitrateperodfmsymbol
-        self.globalsettings.tspacketspersecond = self.globalsettings.usablebitrate / (8 * 188)
+        ctx = None
+        if self.computedevice == "":
+            ctx = cl.create_some_context(interactive=False)
+        else:
+            for any_platform in cl.get_platforms():
+                for found_device in any_platform.get_devices():
+                    if found_device.name == self.computedevice:
+                        ctx = cl.Context(devices=found_device)
+                        break
+
+        self.dvbt_encoder = DVBT.Encoder(ctx, self.odfmmode, self.bandwidth, self.modulation, self.coderate, self.guardinterval, self.alpha, self.cellid)
+
+        self.symbolrate = self.dvbt_encoder.get_symbolrate()
+        self.usablebitrate = self.dvbt_encoder.get_usablebitrate()
 
         self.logger.AppendText("New Settings:\n")
-        self.logger.AppendText("OFDM symbols: %s/sec\n" % self.toUnits(self.globalsettings.ofdmsymbolspersecond))
-        self.logger.AppendText("OFDM frames: %s/sec\n" % self.toUnits(self.globalsettings.ofdmframespersecond))
-        self.logger.AppendText("Usable Bitrate: %sbit/sec\n" % self.toUnits(self.globalsettings.usablebitrate))
-        self.logger.AppendText("Usable Bitrate per OFDM Symbol: %sbit/sec\n" % self.toUnits(self.globalsettings.usablebitrateperodfmsymbol))
 
-        self.logger.AppendText("Channel symbolRate: %sS/sec\n" % self.toUnits(self.globalsettings.symbolrate))
-        self.logger.AppendText("OFDM useful symbol duration: %ss\n" % self.toUnits(self.globalsettings.ofdmsymbollengthuseful))
-        self.logger.AppendText("guard interval duration: %ss\n" % self.toUnits(self.globalsettings.ofdmguardintervallength))
-        self.logger.AppendText("symbol duration: %ss\n" % self.toUnits(self.globalsettings.ofdmsymbollength))
-        self.logger.AppendText("ts packets: %s/sec\n\n" % self.toUnits(self.globalsettings.tspacketspersecond))
+        self.logger.AppendText("Usable Bitrate: %sbit/sec\n" % self.toUnits(self.usablebitrate))
+        self.logger.AppendText("Channel symbolRate: %sS/sec\n" % self.toUnits(self.symbolrate))
 
     def toUnits(self, value):
         if value > 1000000:
@@ -289,9 +287,9 @@ class MainPanel(wx.Panel):
             return "%4.3f m" % (value * 1000)
         return "%4.3f" % value
 
-def gui(globalsettings,eventstart,eventstop,lock):
+if __name__ == '__main__':
     app = wx.App(False)
     frame = wx.Frame(None,-1,"Main Control",size = (650, 550))
-    panel = MainPanel(frame,globalsettings,eventstart,eventstop,lock)
+    panel = MainPanel(frame)
     frame.Show()
     app.MainLoop()
