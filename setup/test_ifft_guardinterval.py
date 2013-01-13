@@ -481,6 +481,148 @@ class file_creator():
             print "at least one ofdm ifft test FAILED\n"
             return False
 
+    def test_algorithmD(self, ofdm_mode, guardinterval):
+        print "\n**************************"
+        print "test ofdm opencl ifft w/o fftshift bealto.com radix2 kernel"
+        passed = 0
+        linecnt = 1
+        g = 0
+        size = 0
+        # create a fft plan
+        #kernel = self.load_kernel("bealto.com_fft2.cl", "fft_2048")
+        #kernel = self.load_kernel("bealto.com_fft2.cl", "fft_1D2048")
+        kernel = self.load_kernel("ochafik.com_fft.cl", "dft")
+
+        #size of guiardinterval destination buffer
+        dest_buf_size = ofdm_mode*(1+guardinterval)
+
+        self.inputbuffer = cl.Buffer(self.ctx , cl.mem_flags.READ_WRITE, size=ofdm_mode*16)
+        # opencl buffer
+        self.outputbuffer = cl.Buffer(self.ctx , cl.mem_flags.READ_WRITE, size=ofdm_mode*16)
+
+        # opencl buffer holding the computed data
+        dest_buf = cl.Buffer(self.ctx, cl.mem_flags.READ_WRITE, size=int(dest_buf_size*16) )
+
+        encoded_data = numpy.array(numpy.zeros(dest_buf_size), dtype=numpy.complex128)
+        
+        if ofdm_mode == 8192:
+            size = 6817
+            print "8k mode"
+            if guardinterval == 0.25:
+                self.fd_input = open('test_bench_ofdm_input_8K_1_4.csv', 'r')
+                self.fd_output = open('test_bench_ofdm_output_8K_1_4.csv', 'r')
+                print "1/4 guard interval"
+                g = guardinterval
+            if guardinterval == 0.125:
+                self.fd_input = open('test_bench_ofdm_input_8K_1_8.csv', 'r')
+                self.fd_output = open('test_bench_ofdm_output_8K_1_8.csv', 'r')
+                print "1/8 guard interval"
+                g = guardinterval
+            if guardinterval == 0.0625:
+                self.fd_input = open('test_bench_ofdm_input_8K_1_16.csv', 'r')
+                self.fd_output = open('test_bench_ofdm_output_8K_1_16.csv', 'r')
+                print "1/16 guard interval"
+                g = guardinterval
+            if guardinterval == 0.03125:
+                self.fd_input = open('test_bench_ofdm_input_8K_1_32.csv', 'r')
+                self.fd_output = open('test_bench_ofdm_output_8K_1_32.csv', 'r')
+                print "1/32 guard interval"
+                g = guardinterval
+                
+        elif ofdm_mode == 2048:
+            size = 1705
+            print "2k mode"
+            if guardinterval == 0.25:
+                self.fd_input = open('test_bench_ofdm_input_2K_1_4.csv', 'r')
+                self.fd_output = open('test_bench_ofdm_output_2K_1_4.csv', 'r')
+                print "1/4 guard interval"
+                g = guardinterval
+            if guardinterval == 0.125:
+                self.fd_input = open('test_bench_ofdm_input_2K_1_8.csv', 'r')
+                self.fd_output = open('test_bench_ofdm_output_2K_1_8.csv', 'r')
+                print "1/8 guard interval"
+                g = guardinterval
+            if guardinterval == 0.0625:
+                self.fd_input = open('test_bench_ofdm_input_2K_1_16.csv', 'r')
+                self.fd_output = open('test_bench_ofdm_output_2K_1_16.csv', 'r')
+                print "1/16 guard interval"
+                g = guardinterval
+            if guardinterval == 0.03125:
+                self.fd_input = open('test_bench_ofdm_input_2K_1_32.csv', 'r')
+                self.fd_output = open('test_bench_ofdm_output_2K_1_32.csv', 'r')
+                print "1/32 guard interval"
+                g = guardinterval
+
+        if g == 0:
+            print "wrong guardinterval specified"
+            return
+        
+        if size == 0:
+            print "wrong ofdm_mode"
+            return
+        
+        for line in self.fd_input:
+            data_to_encode = [float(0) + 1j*float(0)] * ofdm_mode
+            #counter = (2048-size-1)/2+1
+            counter = 0
+            for tmp in line.split(","):
+                if string.find(tmp, " + ") > -1:
+                    data_to_encode[counter]=(float(tmp.split(" + ")[0]) + 1j * float(string.replace(tmp.split(" + ")[1],"i","")))
+                if string.find(tmp, " - ") > -1:
+                    data_to_encode[counter]=(float(tmp.split(" - ")[0]) - 1j * float(string.replace(tmp.split(" - ")[1],"i","")))
+                counter += 1
+            data_to_encode = numpy.array(data_to_encode, dtype=numpy.complex128)
+
+            reference_data = []
+            for tmp in self.fd_output.readline().split(","):
+                if string.find(tmp, " + ") > -1:
+                    reference_data.append(float(tmp.split(" + ")[0]) + 1j * float(string.replace(tmp.split(" + ")[1],"i","")))
+                if string.find(tmp, " - ") > -1:
+                    reference_data.append(float(tmp.split(" - ")[0]) - 1j * float(string.replace(tmp.split(" - ")[1],"i","")))
+
+            reference_data = numpy.array(reference_data, dtype=numpy.complex128)
+            tmp = [float(0) + 1j*float(0)] * ofdm_mode
+            for i in range(0,size):
+                tmp[(ofdm_mode-size+1)/2+i] = data_to_encode[i]
+            for i in range(0,ofdm_mode/2):
+                data_to_encode[i] = tmp[ofdm_mode/2+i]
+                data_to_encode[i+ofdm_mode/2] = tmp[i]
+
+
+
+            cl.enqueue_copy(self.queue, self.inputbuffer, data_to_encode)
+
+            kernel.set_args(self.inputbuffer, self.outputbuffer, numpy.int32(2048),numpy.int32(-1))
+            #cl.enqueue_nd_range_kernel(self.queue,kernel,(int(ofdm_mode/2),),None).wait()
+            cl.enqueue_nd_range_kernel(self.queue,kernel,(int(ofdm_mode),),None).wait()
+            cl.enqueue_copy(self.queue, dest_buf, self.outputbuffer, byte_count=int(16*ofdm_mode), src_offset=0, dest_offset=int(ofdm_mode*guardinterval*16)).wait()
+            cl.enqueue_copy(self.queue, dest_buf, self.outputbuffer, byte_count=int(ofdm_mode*guardinterval*16), src_offset=int(ofdm_mode - ofdm_mode*guardinterval)*16 ,dest_offset=0).wait()
+            cl.enqueue_copy(self.queue, encoded_data, dest_buf)
+
+            if numpy.allclose(reference_data, encoded_data, rtol=1.0000000000000001e-04, atol=1e-06):
+                passed += 1
+                print "Test %d PASSED" % linecnt
+            else:
+                print "Test %d FAILED" % linecnt
+                print "input data:"
+                print data_to_encode
+                print "encoded data[0]:"
+                print encoded_data[0]
+                print "reference data[0]:"
+                print reference_data[0]
+                print "error data:"
+                #print reference_data - encoded_data
+            linecnt += 1
+        print "%d pass out of %d" % (passed, linecnt-1)
+        self.fd_input.close()
+        self.fd_output.close()
+        if passed == (linecnt-1):
+            print "All ofdm ifft tests PASS\n"
+            return True
+        else:
+            print "at least one ofdm ifft test FAILED\n"
+            return False
+
 
 if __name__ == '__main__':
     create_files = file_creator()
@@ -491,6 +633,8 @@ if __name__ == '__main__':
             alltestpass &= create_files.test_algorithmA(mode,guardinterval)
             alltestpass &= create_files.test_algorithmB(mode,guardinterval)
             alltestpass &= create_files.test_algorithmC(mode,guardinterval)
+            alltestpass &= create_files.test_algorithmD(mode,guardinterval)
+
     print "All tests passed: %s" % alltestpass
     
     
