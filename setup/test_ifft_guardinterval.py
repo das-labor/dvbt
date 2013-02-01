@@ -617,14 +617,14 @@ class file_creator():
 
     def test_algorithmE(self, ofdm_mode, guardinterval):
         print "\n**************************"
-        print "test ofdm opencl ifft w/o fftshift http://ochafik.com/ radix 2 fft"
+        print "test ofdm opencl ifft bealto.com radix 2 fft"
         passed = 0
         linecnt = 1
         g = 0
         size = 0
         # create a fft plan
-        kernel = self.load_kernel("FFT.cl", "fftRadix2Kernel")
-        swapkernel = self.load_kernel("FFT.cl", "fftswaprealimag")
+        kernel = self.load_kernel("../FFT.cl", "fftRadix2Kernel")
+        swapkernel = self.load_kernel("../FFT.cl", "fftswaprealimag")
 
         #size of guiardinterval destination buffer
         dest_buf_size = ofdm_mode*(1+guardinterval)
