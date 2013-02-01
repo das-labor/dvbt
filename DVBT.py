@@ -206,7 +206,7 @@ class Encoder:
         # the reverse is 076541
         self.bchpolynom = [1,1,1,0,1,1,1,0,1,1,0,0,0,0,1]
         bitarray = []
-        self.tps_bits = [][]
+        self.tps_bits = []
 
         # tps bits change per frame
         for frame in range(0,4):
@@ -401,26 +401,26 @@ class Encoder:
                 sc.append(k)
             self.scatteredpilots.append(sc)
 
-       self.pilots = []
+        self.pilots = []
 
-       for i in range(0,self.ofdmcarriers):
-           tmp = 0
-           for tpspilot in self.tpspilots:
-               if tpspilot == i:
+        for i in range(0,self.ofdmcarriers):
+            tmp = 0
+            for tpspilot in self.tpspilots:
+                if tpspilot == i:
                     tmp = 1
                     break
-           if tmp == 0:
-               for continualpilot in self.continualpilots:
-                   if continualpilot == i:
+            if tmp == 0:
+                for continualpilot in self.continualpilots:
+                    if continualpilot == i:
                         tmp = 2
                         break
-           if tmp == 0:
-               for scatteredpilot in self.scatteredpilots:
-                   if scatteredpilot == i:
+            if tmp == 0:
+                for scatteredpilot in self.scatteredpilots:
+                    if scatteredpilot == i:
                         tmp = 3
                         break
 
-           self.pilots.append(tmp)
+            self.pilots.append(tmp)
 
     def get_input_fifo(self):
         return self.inputfd
