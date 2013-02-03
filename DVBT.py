@@ -139,7 +139,10 @@ class Encoder:
         self.ofdmsymbollength = self.ofdmsymbollengthuseful + self.ofdmguardintervallength
         self.ofdmsymbolspersecond = self.symbolrate / self.ofdmmode /  (1 + self.guardinterval)
         self.ofdmframespersecond = self.ofdmsymbolspersecond / self.symbolsperframe
-
+        # stats
+        self.totalsymbolswritten = 0
+        self.symbolswrittentofifo = 0
+        
         # round the usablebitrate reported to ffmpeg
         self.usablebitrateperodfmsymbol = self.odfmuseablecarriers * self.modulation * self.coderate * 0.921182266
         self.usablebitrate = self.ofdmsymbolspersecond * self.usablebitrateperodfmsymbol
@@ -445,6 +448,9 @@ class Encoder:
 
     def get_symbolspersecondwritten(self):
         return self.symbolswrittentofifo
+        
+    def get_totalsymbolswritten(self):
+        return self.totalsymbolswritten     
 
     def stop(self):
         self.thread_event.set()
@@ -467,6 +473,7 @@ class Encoder:
     def update_timer(self):
         self.cl_thread_lock.acquire()
         self.symbolswrittentofifo = self.symbolcounter
+        self.totalsymbolswritten += self.symbolcounter
         self.symbolcounter = 0
         self.cl_thread_lock.release()
 
