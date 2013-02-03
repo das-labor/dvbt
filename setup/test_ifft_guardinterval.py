@@ -18,13 +18,23 @@
 
 import os
 import numpy
-import pyopencl as cl
+try:
+    import pyopencl as cl
+    withoutpyopencl = False
+except ImportError, e:
+    withoutpyopencl = True
+    print "pyopencl not found !"
 import time
 import threading
 import time
 import string
-from pyfft.cl import Plan
-
+try:
+    from pyfft.cl import Plan
+    withoutpyfft = False
+except ImportError, e:
+    withoutpyfft = True
+    print "pyfft not found !"
+    
 class file_creator():
     def __init__(self):
         # create a opencl context
@@ -622,21 +632,6 @@ class file_creator():
         linecnt = 1
         g = 0
         size = 0
-        # create a fft plan
-        kernel = self.load_kernel("../FFT.cl", "fftRadix2Kernel")
-        swapkernel = self.load_kernel("../FFT.cl", "fftswaprealimag")
-
-        #size of guiardinterval destination buffer
-        dest_buf_size = ofdm_mode*(1+guardinterval)
-
-        self.inputbuffer = cl.Buffer(self.ctx , cl.mem_flags.READ_WRITE, size=ofdm_mode*8)
-        # opencl buffer
-        self.outputbuffer = cl.Buffer(self.ctx , cl.mem_flags.READ_WRITE, size=ofdm_mode*8)
-
-        # opencl buffer holding the computed data
-        dest_buf = cl.Buffer(self.ctx, cl.mem_flags.READ_WRITE, size=int(dest_buf_size*8) )
-
-        encoded_data = numpy.array(numpy.zeros(dest_buf_size), dtype=numpy.complex64)
         
         if ofdm_mode == 8192:
             size = 6817
@@ -693,9 +688,27 @@ class file_creator():
         if size == 0:
             print "wrong ofdm_mode"
             return
+            
+        kernel = self.load_kernel("../FFT.cl", "fftRadix2Kernel")
+        swapkernel = self.load_kernel("../FFT.cl", "fftswaprealimag")
+
+        #size of guiardinterval destination buffer
+        dest_buf_size = ofdm_mode*(1+guardinterval)
+        self.tmpbuffer = cl.Buffer(self.ctx , cl.mem_flags.READ_WRITE, size=size*8)
+        self.inputbuffer = cl.Buffer(self.ctx , cl.mem_flags.READ_WRITE, size=ofdm_mode*8)
+        # opencl buffer
+        self.outputbuffer = cl.Buffer(self.ctx , cl.mem_flags.READ_WRITE, size=ofdm_mode*8)
+
+        # opencl buffer holding the computed data
+        dest_buf = cl.Buffer(self.ctx, cl.mem_flags.READ_WRITE, size=int(dest_buf_size*8) )
+
+        encoded_data = numpy.array(numpy.zeros(dest_buf_size), dtype=numpy.complex64)
+        
+      
         
         for line in self.fd_input:
-            data_to_encode = numpy.array([float(0) + 1j*float(0)] * ofdm_mode, dtype=numpy.complex64)
+            data_to_encode = numpy.array([float(0) + 1j*float(0)] * size, dtype=numpy.complex64)
+            #data_to_encode = numpy.array([float(0) + 1j*float(0)] * ofdm_mode, dtype=numpy.complex64)
 
             cl.enqueue_copy(self.queue, self.inputbuffer, data_to_encode)
             cl.enqueue_copy(self.queue, self.outputbuffer, data_to_encode)
@@ -717,17 +730,12 @@ class file_creator():
                     reference_data.append(float(tmp.split(" - ")[0]) - 1j * float(string.replace(tmp.split(" - ")[1],"i","")))
 
             reference_data = numpy.array(reference_data, dtype=numpy.complex64)
-
+            
             # do fftshift
-            tmp = [float(0) + 1j*float(0)] * ofdm_mode
-            for i in range(0,size):
-                tmp[(ofdm_mode-size+1)/2+i] = data_to_encode[i]
-            for i in range(0,ofdm_mode/2):
-                data_to_encode[i] = tmp[ofdm_mode/2+i]
-                data_to_encode[i+ofdm_mode/2] = tmp[i]
-
-
-            cl.enqueue_copy(self.queue, self.inputbuffer, data_to_encode)
+            cl.enqueue_copy(self.queue, self.inputbuffer,numpy.array([float(0) + 1j*float(0)] * ofdm_mode, dtype=numpy.complex64))
+            cl.enqueue_copy(self.queue, self.tmpbuffer, data_to_encode)
+            cl.enqueue_copy(self.queue, self.inputbuffer, self.tmpbuffer, byte_count=((size-1)/2)*8,src_offset=0,dest_offset=(ofdm_mode-(size-1)/2)*8)
+            cl.enqueue_copy(self.queue, self.inputbuffer, self.tmpbuffer, byte_count=((size+1)/2)*8,src_offset=((size-1)/2)*8,dest_offset=0)
 
             swapkernel.set_args(self.inputbuffer)
             cl.enqueue_nd_range_kernel(self.queue,swapkernel,(int(ofdm_mode),),None).wait()
@@ -813,10 +821,16 @@ if __name__ == '__main__':
         for guardinterval in [0.25,0.125,0.0625,0.03125]:
             alltestpass &= create_files.test_algorithmA(mode,guardinterval)
             alltestpass &= create_files.test_algorithmB(mode,guardinterval)
-            alltestpass &= create_files.test_algorithmC(mode,guardinterval)
-            alltestpass &= create_files.test_algorithmD(mode,guardinterval)
-            alltestpass &= create_files.test_algorithmE(mode,guardinterval)
-
+            if not withoutpyfft:
+                alltestpass &= create_files.test_algorithmC(mode,guardinterval)
+            else:
+            	print "skipping pyfft tests"
+            if not withoutpyopencl:
+                #alltestpass &= create_files.test_algorithmD(mode,guardinterval)
+                alltestpass &= create_files.test_algorithmE(mode,guardinterval)
+            else:
+            	print "skipping pyopencl tests"
+            	
     print "All tests passed: %s" % alltestpass
     
     
