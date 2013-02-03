@@ -17,18 +17,14 @@ import wx
 import pyopencl as cl
 import DVBT
 
-
 ########################################################################
-class TabPaneldvbtSettings(wx.Panel):
+class GlobalSettings():
     """
-    This will be the first notebook tab
+    Stores global settings.
     """
     #----------------------------------------------------------------------
     def __init__(self, parent):
         """"""
-
-        wx.Panel.__init__(self, parent=parent, id=wx.ID_ANY)
-
         self.bandwidth = 8.0
         self.coderate = 0.5
         self.odfmmode = 8192
@@ -41,10 +37,44 @@ class TabPaneldvbtSettings(wx.Panel):
         self.ffmpeginputfile = ""
         self.computedevice = ""
         self.cellid = 0
+        self.inputfile = ""
+        self.outputfile = ""
+        self.addargs = ""
+        self.service_provider = "ffmpeg_service_provider"
+        self.service_name = "ffmpeg_service_name"
+        self.service_id = 1
+        self.writeoutputfile = 1
+        self.radiofreq = 786
+        self.symbolrate = 0
+        self.usablebitrate = 0
+        self.ctx = None
+        self.symbolspersecondwritten = 0
+    	self.totalsymbolswritten = 0
+    	
+    def update_global_settings(self):
+    	if self.ctx is None:
+    	    ctx = cl.create_some_context(interactive=False)
+    	else:
+    	    ctx = self.ctx
+        self.dvbt_encoder = DVBT.Encoder(ctx, self.odfmmode, self.bandwidth, self.modulation, self.coderate, self.guardinterval, self.alpha, self.cellid)
 
-        # A multiline TextCtrl - This is here to show how the events work in this program, don't pay too much attention to it
-        #self.logger = wx.TextCtrl(self, pos=(340,20), size=(290,240), style=wx.TE_MULTILINE | wx.TE_READONLY)
+        self.symbolrate = self.dvbt_encoder.get_symbolrate()
+        self.usablebitrate = self.dvbt_encoder.get_usablebitrate()
+        self.symbolspersecondwritten = self.dvbt_encoder.get_symbolspersecondwritten()
+        
+########################################################################
+class TabPaneldvbtSettings(wx.Panel):
+    """
+    This will be the dvbtSettings notebook tab
+    """
+    #----------------------------------------------------------------------
+    def __init__(self, parent, gs):
+        """"""
 
+        wx.Panel.__init__(self, parent=parent, id=wx.ID_ANY)
+        
+        self.gs = gs
+       
         # label cell ID
         self.lblcellID = wx.StaticText(self, label="cell ID", pos=(10,30))
         self.editcellID = wx.TextCtrl(self, value="0", pos=(220, 30), size=(100,-1))
@@ -109,99 +139,218 @@ class TabPaneldvbtSettings(wx.Panel):
 
         self.Bind(wx.EVT_CLOSE, self.EvtClose)
 
-        self.updateGlobalSettings()
 
     def EvtComboBoxcoderate(self, event):
         if event.GetString() == "1/2":
-            self.coderate = 0.5
+            self.gs.coderate = 0.5
         if event.GetString() == "2/3":
-            self.coderate = 2.0 / 3.0
+            self.gs.coderate = 2.0 / 3.0
         if event.GetString() == "3/4":
-            self.coderate = 0.75
+            self.gs.coderate = 0.75
         if event.GetString() == "5/6":
-            self.coderate = 5.0 / 6.0
+            self.gs.coderate = 5.0 / 6.0
         if event.GetString() == "7/8":
-            self.coderate = 0.875
-        self.updateGlobalSettings()
+            self.gs.coderate = 0.875
 
     def EvtComboBoxofdmmode(self, event):
         if event.GetString() == "8K mode":
-            self.odfmmode = 8192
-            self.odfmuseablecarriers = 6048
+            self.gs.odfmmode = 8192
+            self.gs.odfmuseablecarriers = 6048
         if event.GetString() == "2K mode":
-            self.odfmmode = 2048
-            self.odfmuseablecarriers = 1512
-        self.updateGlobalSettings()
+            self.gs.odfmmode = 2048
+            self.gs.odfmuseablecarriers = 1512
 
     def EvtComboBoxchannelbandwidth(self, event):
         if event.GetString() == "8Mhz":
-            self.bandwidth = 8
+            self.gs.bandwidth = 8
         if event.GetString() == "7Mhz":
-            self.bandwidth = 7
+            self.gs.bandwidth = 7
         if event.GetString() == "6Mhz":
-            self.bandwidth = 6
-        self.updateGlobalSettings()
+            self.gs.bandwidth = 6
 
     def EvtComboBoxguardinteraval(self, event):
         if event.GetString() == "1/4":
-            self.guardinterval = 0.25
+            self.gs.guardinterval = 0.25
         if event.GetString() == "1/8":
-            self.guardinterval = 0.125
+            self.gs.guardinterval = 0.125
         if event.GetString() == "1/16":
-            self.guardinterval = 0.0625
+            self.gs.guardinterval = 0.0625
         if event.GetString() == "1/32":
-            self.guardinterval = 0.03125
-        self.updateGlobalSettings()
+            self.gs.guardinterval = 0.03125
 
     def EvtComboBoxmodulation(self, event):
         if event.GetString() == "QPSK":
-            self.modulation = 2
+            self.gs.modulation = 2
         if event.GetString() == "16-QAM":
-            self.modulation = 4
+            self.gs.modulation = 4
         if event.GetString() == "64-QAM":
-            self.modulation = 6
-        self.updateGlobalSettings()
-
+            self.gs.modulation = 6
         
     def Evtx11displays(self, event):
         self.x11displaystring = event.GetString()
-        #self.logger.AppendText("new X11 screen selected : %s\n" % event.GetString())
 
     def EvtComboBoxalpha(self, event):
-        self.alpha = int(event.GetString())
-
-
-    #def EvtText(self, event):
-        #self.logger.AppendText('EvtText: %s\n' % event.GetString())
-
+        self.gs.alpha = int(event.GetString())
 
     def EvtClose(self, event):
         self.Destroy()
 
-    def EvtCheckBox(self, event):
-        #self.logger.AppendText('EvtCheckBox: %d\n' % event.Checked())
-        print "blah"
         
-    def updateGlobalSettings(self):
-        ctx = None
-        if self.computedevice == "":
-            ctx = cl.create_some_context(interactive=False)
+########################################################################
+class TabPanelMain(wx.Panel):
+    """
+    This will be the Main notebook tab
+    """
+    #----------------------------------------------------------------------
+    def __init__(self, parent, gs):
+        """"""
+        wx.Panel.__init__(self, parent=parent, id=wx.ID_ANY)
+         
+        self.gs = gs
+        
+        self.cbffmpeg = wx.CheckBox(self, -1, 'encode input stream using ffmpeg', (10, 30))
+        self.cbffmpeg.SetValue(True)
+        
+        self.cbtransmitlogo = wx.CheckBox(self, -1, 'standby: transmit logo', (10, 60))
+        self.cbtransmitlogo.SetValue(True)
+        
+        # text box for logo file name
+        self.TextCtrllogofile = wx.TextCtrl(self, pos=(200,60), size=(300,-1), value="./logo.png" )
+        
+        self.rb1 = wx.RadioButton(self, -1, 'write to file/fifo', (10, 120), style=wx.RB_GROUP)
+        self.rb2 = wx.RadioButton(self, -1, 'output using opengl', (10, 150))
+
+        self.Bind(wx.EVT_RADIOBUTTON, self.RadioButtonEvent, id=self.rb1.GetId())
+        self.Bind(wx.EVT_RADIOBUTTON, self.RadioButtonEvent, id=self.rb2.GetId())
+
+        # label input file name
+        self.lblffmpegargs = wx.StaticText(self, label="input file:", pos=(10, 180))
+        
+        # text box for input file name
+        self.TextCtrlinputfile = wx.TextCtrl(self, pos=(90,180), size=(300,-1), value="" )
+        
+        # the button choose input file
+        self.buttoninputfile =wx.Button(self, label="Choose input file", pos=(20, 210))
+        self.Bind(wx.EVT_BUTTON, self.OnClickButtonInput,self.buttoninputfile)
+        
+        # label output file name
+        self.lblffmpegargs = wx.StaticText(self, label="output file:", pos=(10, 260))
+        
+        # text box for output file name
+        self.TextCtrloutputfile = wx.TextCtrl(self, pos=(90,260), size=(300,-1), value="" )
+        
+        # the button choose output file
+        self.buttonoutputfile =wx.Button(self, label="Choose output file", pos=(20, 290))
+        self.Bind(wx.EVT_BUTTON, self.OnClickButtonOutput,self.buttonoutputfile)
+	
+        # the button (re)start
+        self.buttonstart =wx.Button(self, label="(Re)Start", pos=(420, 300))
+        self.Bind(wx.EVT_BUTTON, self.OnClickButtonStart,self.buttonstart)
+        
+    def OnClickButtonStart(self,event):
+        print "bandwidth %f" % self.gs.bandwidth
+        print "coderate %f" % self.gs.coderate
+        print "odfmmode %f" % self.gs.odfmmode
+        print "odfmcarriers %f" % self.gs.odfmcarriers
+        print "odfmuseablecarriers %f" % self.gs.odfmuseablecarriers
+        print "guardinterval %f" % self.gs.guardinterval
+        print "modulation %f" % self.gs.modulation
+        print "alpha %f" % self.gs.alpha
+        print "cellid %f" % self.gs.cellid
+        print "addargs %s" % self.gs.addargs
+        print "service_provider %s" % self.gs.service_provider
+        print "service_name %s" % self.gs.service_name
+        print "service_id %f" % self.gs.service_id
+        print "inputfile %s" % self.gs.inputfile
+        print "outputfile %s" % self.gs.outputfile
+        print "write outputfile %f" % self.gs.writeoutputfile
+        print "radio freq %f" % self.gs.radiofreq
+          
+    def RadioButtonEvent(self, event):
+        self.TextCtrloutputfile.SetEditable(self.rb1.GetValue())
+        self.gs.writeoutputfile = self.rb1.GetValue()
+        
+        if self.rb2.GetValue():
+            self.gs.outputfile = self.TextCtrloutputfile.GetValue()
+            self.TextCtrloutputfile.SetValue("")
+            self.buttonoutputfile.Disable()
         else:
-            for any_platform in cl.get_platforms():
-                for found_device in any_platform.get_devices():
-                    if found_device.name == self.computedevice:
-                        ctx = cl.Context(devices=found_device)
-                        break
+            self.TextCtrloutputfile.SetValue(self.gs.outputfile)
+            self.buttonoutputfile.Enable()    
+            
+    def OnClickButtonInput(self,event):
+        dialog = wx.FileDialog ( None, style = wx.OPEN )
+	if dialog.ShowModal() == wx.ID_OK:
+   	    inputfile = dialog.GetPath()
+            self.TextCtrlinputfile.SetValue(inputfile)
+            self.gs.inputfile = inputfile
+	dialog.Destroy()
+	
+    def OnClickButtonOutput(self,event):
+        dialog = wx.FileDialog ( None, style = wx.OPEN )
+	if dialog.ShowModal() == wx.ID_OK:
+   	    outputfile = dialog.GetPath()
+            self.TextCtrloutputfile.SetValue(outputfile)
+            self.gs.outputfile = outputfile
+	dialog.Destroy()
 
-        self.dvbt_encoder = DVBT.Encoder(ctx, self.odfmmode, self.bandwidth, self.modulation, self.coderate, self.guardinterval, self.alpha, self.cellid)
-
-        self.symbolrate = self.dvbt_encoder.get_symbolrate()
-        self.usablebitrate = self.dvbt_encoder.get_usablebitrate()
 
         #self.logger.AppendText("New Settings:\n")
 
         #self.logger.AppendText("Usable Bitrate: %sbit/sec\n" % self.toUnits(self.usablebitrate))
         #self.logger.AppendText("Channel symbolRate: %sS/sec\n" % self.toUnits(self.symbolrate))
+
+
+        
+########################################################################
+class TabPanelffmpegSettings(wx.Panel):
+    """
+    This will be the ffmpegSettings notebook tab
+    """
+    #----------------------------------------------------------------------
+    def __init__(self, parent, gs):
+        """"""
+
+        wx.Panel.__init__(self, parent=parent, id=wx.ID_ANY)
+        
+        self.gs = gs
+        
+        # label ffmpeg additional args
+        self.lblffmpegargs = wx.StaticText(self, label="additional arguments:", pos=(10, 30))
+
+        # text box for additional ffmpeg args
+        self.TextCtrlffmpegaddargs = wx.TextCtrl(self, pos=(150,30), size=(300,-1), value="")
+        self.Bind(wx.EVT_TEXT, self.EvtTextadargs, self.TextCtrlffmpegaddargs)
+        
+        self.lblsp= wx.StaticText(self, label="service_provider:", pos=(10, 60))
+        self.TextCtrlffmpegserviceprovider = wx.TextCtrl(self, pos=(150,60), size=(300,-1), value="ffmpeg_service_provider")
+        self.Bind(wx.EVT_TEXT, self.EvtTextsp, self.TextCtrlffmpegserviceprovider)
+        
+        self.lblsn = wx.StaticText(self, label="service_name:", pos=(10, 90))
+        self.TextCtrlffmpegservicename = wx.TextCtrl(self, pos=(150,90), size=(300,-1), value="ffmpeg_service_name")
+        self.Bind(wx.EVT_TEXT, self.EvtTextsn, self.TextCtrlffmpegservicename)
+        
+        self.lblsid = wx.StaticText(self, label="service_id:", pos=(10, 120))
+        self.TextCtrlffmpegserviceid = wx.TextCtrl(self, pos=(150,120), size=(300,-1), value="1")
+        self.Bind(wx.EVT_TEXT, self.EvtTextsid, self.TextCtrlffmpegservicename)
+                
+        self.lblbr = wx.StaticText(self, label="Stream Bitrate:", pos=(10, 150))
+        self.TextCtrlffmpegbitrate = wx.TextCtrl(self, pos=(150,150), size=(300,-1), value="", style=wx.TE_READONLY)
+
+    def EvtTextadargs(self, event):
+        self.gs.addargs = event.GetString()
+        
+    def EvtTextsp(self, event):
+        self.gs.service_provider = event.GetString()
+        
+    def EvtTextsn(self, event):
+        self.gs.service_name = event.GetString()
+
+    def EvtTextsid(self, event):
+        self.gs.service_id = event.GetString()
+        
+    def update(self):
+        self.TextCtrlffmpegbitrate.Value = "%sbit/s" % self.toUnits(self.gs.usablebitrate)
 
     def toUnits(self, value):
         if value > 1000000:
@@ -214,118 +363,20 @@ class TabPaneldvbtSettings(wx.Panel):
             return "%4.3f m" % (value * 1000)
         return "%4.3f" % value
         
-########################################################################
-class TabPanelMain(wx.Panel):
-    """
-    This will be the first notebook tab
-    """
-    #----------------------------------------------------------------------
-    def __init__(self, parent):
-        """"""
-        wx.Panel.__init__(self, parent=parent, id=wx.ID_ANY)
-         
-        self.cbffmpeg = wx.CheckBox(self, -1, 'encode input stream using ffmpeg', (10, 30))
-        self.cbffmpeg.SetValue(True)
-       
-        self.rb1 = wx.RadioButton(self, -1, 'write to file/fifo', (10, 90), style=wx.RB_GROUP)
-        self.rb2 = wx.RadioButton(self, -1, 'output using opengl', (10, 120))
 
-        self.Bind(wx.EVT_RADIOBUTTON, self.SetVal, id=self.rb1.GetId())
-        self.Bind(wx.EVT_RADIOBUTTON, self.SetVal, id=self.rb2.GetId())
-
-        # label input file name
-        self.lblffmpegargs = wx.StaticText(self, label="input file:", pos=(10, 150))
         
-        # text box for input file name
-        self.TextCtrlinputfile = wx.TextCtrl(self, pos=(90,150), size=(300,-1), value="" , style=wx.TE_READONLY)
-        
-        # the button choose input file
-        self.buttoninputfile =wx.Button(self, label="Choose input file", pos=(20, 180))
-        self.Bind(wx.EVT_BUTTON, self.OnClickButtonInput,self.buttoninputfile)
-        
-        # label output file name
-        self.lblffmpegargs = wx.StaticText(self, label="output file:", pos=(10, 230))
-        
-        # text box for output file name
-        self.TextCtrloutputfile = wx.TextCtrl(self, pos=(90,230), size=(300,-1), value="" , style=wx.TE_READONLY)
-        
-        # the button choose output file
-        self.buttonoutputfile =wx.Button(self, label="Choose output file", pos=(20, 260))
-        self.Bind(wx.EVT_BUTTON, self.OnClickButtonOutput,self.buttonoutputfile)
-	
-        # the button (re)start
-        self.buttonstart =wx.Button(self, label="(Re)Start", pos=(420, 300))
-        self.Bind(wx.EVT_BUTTON, self.OnClickButtonStart,self.buttonstart)
-        
-    def OnClickButtonStart(self,event):
-        #self.cellid = int(self.editcellID.GetValue())
-        #self.dvbt_encoder.run()
-        print "blah"
-        
-    def SetVal(self, event):
-        print "blub"
-        
-    def OnClickButtonInput(self,event):
-        dialog = wx.FileDialog ( None, style = wx.OPEN )
-	if dialog.ShowModal() == wx.ID_OK:
-   	    self.inputfile = dialog.GetPath()
-            self.TextCtrlinputfile.SetValue(self.inputfile)
-	dialog.Destroy()
-	
-    def OnClickButtonOutput(self,event):
-        dialog = wx.FileDialog ( None, style = wx.OPEN )
-	if dialog.ShowModal() == wx.ID_OK:
-   	    self.outputfile = dialog.GetPath()
-            self.TextCtrloutputfile.SetValue(self.outputfile)
-	dialog.Destroy()
-
-########################################################################
-class TabPanelffmpegSettings(wx.Panel):
-    """
-    This will be the first notebook tab
-    """
-    #----------------------------------------------------------------------
-    def __init__(self, parent):
-        """"""
-
-        wx.Panel.__init__(self, parent=parent, id=wx.ID_ANY)
-        # label ffmpeg additional args
-        self.lblffmpegargs = wx.StaticText(self, label="additional arguments:", pos=(10, 30))
-
-        # text box for additional ffmpeg args
-        self.TextCtrlffmpegaddargs = wx.TextCtrl(self, pos=(150,30), size=(300,-1), value="")
-        self.Bind(wx.EVT_TEXT, self.EvtTextffmpegargs, self.TextCtrlffmpegaddargs)
-        
-
-        self.lblsp= wx.StaticText(self, label="service_provider:", pos=(10, 60))
-        self.TextCtrlffmpegserviceprovider = wx.TextCtrl(self, pos=(150,60), size=(300,-1), value="")
-        #self.Bind(wx.EVT_TEXT, self.EvtTextffmpegargs, self.TextCtrlffmpegserviceprovider)
-        
-        self.lblsn = wx.StaticText(self, label="service_name:", pos=(10, 90))
-        self.TextCtrlffmpegservicename = wx.TextCtrl(self, pos=(150,90), size=(300,-1), value="")
-        #self.Bind(wx.EVT_TEXT, self.EvtTextffmpegargs, self.TextCtrlffmpegservicename)
-        
-        self.lblsid = wx.StaticText(self, label="service_id:", pos=(10, 120))
-        self.TextCtrlffmpegserviceid = wx.TextCtrl(self, pos=(150,120), size=(300,-1), value="")
-        
-        self.lblbr = wx.StaticText(self, label="Stream Bitrate:", pos=(10, 150))
-        self.TextCtrlffmpegbitrate = wx.TextCtrl(self, pos=(150,150), size=(300,-1), value="")
-        #self.Bind(wx.EVT_TEXT, self.EvtTextffmpegargs, self.TextCtrlffmpegserviceid)
-
-    def EvtTextffmpegargs(self, event):
-        self.ffmpegargs = event.GetString()
-
-
-########################################################################
+        ########################################################################
 class TabPanelradioSettings(wx.Panel):
     """
-    This will be the first notebook tab
+    This will be the radioSettings notebook tab
     """
     #----------------------------------------------------------------------
-    def __init__(self, parent):
+    def __init__(self, parent, gs):
         """"""
 
         wx.Panel.__init__(self, parent=parent, id=wx.ID_ANY)
+        
+        self.gs = gs
         
         self.channelarray = ["21	474Mhz","22	482Mhz","23	490Mhz","24	498Mhz","25	506Mhz","26	514Mhz","27	522Mhz","28	530Mhz","29	538Mhz","30	546Mhz","31	554Mhz","32	562Mhz","33	570Mhz","34	578Mhz","35	586Mhz","36	594Mhz","37	602Mhz","38	610Mhz","39	618Mhz","40	626Mhz","41	634Mhz","42	642Mhz","43	650Mhz","44	658Mhz","45	666Mhz","46	674Mhz","47	682Mhz","48	690Mhz","49	698Mhz","50	706Mhz","51	714Mhz","52	722Mhz","53	730Mhz","54	738Mhz","55	746Mhz","56	754Mhz","57	762Mhz","58	770Mhz","59	778Mhz","60	786Mhz","61	794Mhz","62	802Mhz","63	810Mhz","64	818Mhz","65	826Mhz","66	834Mhz","67	842Mhz","68	850Mhz","69	858Mhz"]
 
@@ -333,24 +384,87 @@ class TabPanelradioSettings(wx.Panel):
         self.lblchannel = wx.StaticText(self, label="UHF channel:", pos=(10, 30))
 
 	# the combobox channel list
-        self.editchannellist = wx.ComboBox(self, pos=(220, 30), size=(300, -1), choices=self.channelarray, style=wx.CB_READONLY, value="60	786Mhz")
+        self.editchannellist = wx.ComboBox(self, pos=(150, 30), size=(300, -1), choices=self.channelarray, style=wx.CB_READONLY, value="60	786Mhz")
         self.Bind(wx.EVT_COMBOBOX, self.EvtComboBoxchannellist, self.editchannellist)
-
+        
+        # label symbol rate
+        self.lblchannel = wx.StaticText(self, label="symbolrate:", pos=(10, 60))
+        self.TextCtrlsr = wx.TextCtrl(self, pos=(150,60), size=(300,-1), value="", style=wx.TE_READONLY)
+        
+        # label channel bandwidth
+        self.lblchannel = wx.StaticText(self, label="bandwidth:", pos=(10, 90))
+        self.TextCtrlbw = wx.TextCtrl(self, pos=(150,90), size=(300,-1), value="", style=wx.TE_READONLY)
+        
     def EvtComboBoxchannellist(self, event):
-        #self.computedevice = event.GetString().split(':')[1].strip()
-        #self.logger.AppendText("new radio settings: %s\n" % event.GetString())
-        print "blah"
+        self.gs.radiofreq = event.GetString().split('	')[1].split('Mhz')[0]
+        
+    def update(self):
+        self.TextCtrlbw.Value = "%s Mhz" % self.gs.bandwidth
+        self.TextCtrlsr.Value = "%shz" % self.toUnits(self.gs.symbolrate)
+        
+    def toUnits(self, value):
+        if value > 1000000:
+            return "%4.3f M" % (value / 1000000)
+        if value > 1000:
+            return "%4.3f k" % (value / 1000)
+        if value < 0.001:
+            return "%4.3f u" % (value * 1000000)
+        if value < 1:
+            return "%4.3f m" % (value * 1000)
+        return "%4.3f" % value 
         
 ########################################################################
-class TabPanelopenclsettings(wx.Panel):
+class TabPanelstatus(wx.Panel):
     """
-    This will be the first notebook tab
+    This will be the status notebook tab
     """
     #----------------------------------------------------------------------
-    def __init__(self, parent):
+    def __init__(self, parent, gs):
         """"""
 
         wx.Panel.__init__(self, parent=parent, id=wx.ID_ANY)
+        
+        self.gs = gs
+        # OFDM
+        self.lblrate = wx.StaticText(self, label="rate:", pos=(10, 90))
+        
+        # total
+        self.lblSymbolswritten = wx.StaticText(self, label="total symbols:", pos=(10, 30))
+        self.lblframeswritten = wx.StaticText(self, label="total frames:", pos=(10, 60))
+        
+       
+    def update(self):
+    	if self.gs.dvbt_encoder is not None:
+    	    self.gs.symbolspersecondwritten = self.gs.dvbt_encoder.get_symbolspersecondwritten()
+    	    self.gs.totalsymbolswritten = self.gs.dvbt_encoder.get_totalsymbolswritten()
+    	
+        self.lblrate.Value = "rate: %3.1f" % (self.gs.symbolspersecondwritten / self.gs.symbolrate * 100)
+        self.lblSymbolswritten.Value = "total symbols: %s" % self.toUnits(self.gs.totalsymbolswritten)
+        self.lblframeswritten.Value = "total frames: %s" % self.toUnits(self.gs.totalsymbolswritten/68)
+        
+    def toUnits(self, value):
+        if value > 1000000:
+            return "%4.3f M" % (value / 1000000)
+        if value > 1000:
+            return "%4.3f k" % (value / 1000)
+        if value < 0.001:
+            return "%4.3f u" % (value * 1000000)
+        if value < 1:
+            return "%4.3f m" % (value * 1000)
+        return "%4.3f" % value         
+########################################################################
+class TabPanelopenclsettings(wx.Panel):
+    """
+    This will be the openclsettings notebook tab
+    """
+    #----------------------------------------------------------------------
+    def __init__(self, parent, gs):
+        """"""
+
+        wx.Panel.__init__(self, parent=parent, id=wx.ID_ANY)
+        
+        self.gs = gs
+        
         # label Compute Platform
         self.lblcomputedevice = wx.StaticText(self, label="Compute Platform:", pos=(10, 30))
 
@@ -363,7 +477,8 @@ class TabPanelopenclsettings(wx.Panel):
         for any_platform in cl.get_platforms():
             clplatformList.append(any_platform.name)
             
-        self.clplatform = clplatformList[0]
+        self.gs.clplatform =  cl.get_platforms()[0]
+        self.gs.clcomputedevice = self.gs.clplatform.get_devices()[0]
         
         for any_platform in cl.get_platforms():
             for found_device in any_platform.get_devices():
@@ -388,6 +503,9 @@ class TabPanelopenclsettings(wx.Panel):
                
        for any_platform in cl.get_platforms():
        	   if any_platform.name == self.clplatform:
+               self.gs.clplatform = any_platform
+               self.gs.clcomputedevice = any_platform.get_devices()[0]
+               
                for found_device in any_platform.get_devices():
                    if found_device.type == 4 :
                        computedeviceList.append("GPU: %s" % found_device.name)
@@ -395,7 +513,7 @@ class TabPanelopenclsettings(wx.Panel):
                        computedeviceList.append("CPU: %s" % found_device.name)
                break
        self.editcomputedevice.choices = computedeviceList
-
+       
     def EvtComboBoxcomputedevice(self, event):
        self.computedevice = event.GetString().split(':')[1].strip()
        
@@ -415,44 +533,41 @@ class Notebookdvbt(wx.Notebook):
                              #wx.BK_LEFT
                              #wx.BK_RIGHT
                              )
-
+        # class holding all the settings
+        self.gs = GlobalSettings(self)
+        
         # Create the first tab and add it to the notebook
-        tabOne = TabPanelMain(self)
-        tabOne.SetBackgroundColour("Gray")
-        self.AddPage(tabOne, "Main")
+        self.tabOne = TabPanelMain(self,self.gs)
+        self.tabOne.SetBackgroundColour("Gray")
+        self.AddPage(self.tabOne, "Main")
 
         # Create and add the second tab
-        tabTwo = TabPaneldvbtSettings(self)
-        self.AddPage(tabTwo, "DVBT Settings")
+        self.tabTwo = TabPaneldvbtSettings(self,self.gs)
+        self.AddPage(self.tabTwo, "DVBT Settings")
         
         # Create and add the third tab
-        tabThree = TabPanelffmpegSettings(self)
-        self.AddPage(tabThree, "ffmpeg settings")
+        self.tabThree = TabPanelffmpegSettings(self,self.gs)
+        self.AddPage(self.tabThree, "ffmpeg settings")
         
         # Create and add the fours tab
-        tabFour = TabPanelopenclsettings(self)
-        self.AddPage(tabFour, "OpenCL settings")
+        self.tabFour = TabPanelopenclsettings(self,self.gs)
+        self.AddPage(self.tabFour, "OpenCL settings")
         
-                # Create and add the fives tab
-        tabFive = TabPanelradioSettings(self)
-        self.AddPage(tabFive, "radio settings")
-
-
+        # Create and add the fives tab
+        self.tabFive = TabPanelradioSettings(self,self.gs)
+        self.AddPage(self.tabFive, "radio settings")
         self.Bind(wx.EVT_NOTEBOOK_PAGE_CHANGED, self.OnPageChanged)
-        self.Bind(wx.EVT_NOTEBOOK_PAGE_CHANGING, self.OnPageChanging)
+        
+        # Create and add the sixs tab
+        self.tabSix = TabPanelstatus(self,self.gs)
+        self.AddPage(self.tabSix, "OFDM status")
+        self.Bind(wx.EVT_NOTEBOOK_PAGE_CHANGED, self.OnPageChanged)
 
     def OnPageChanged(self, event):
-        old = event.GetOldSelection()
-        new = event.GetSelection()
-        sel = self.GetSelection()
-        print 'OnPageChanged,  old:%d, new:%d, sel:%d\n' % (old, new, sel)
-        event.Skip()
-
-    def OnPageChanging(self, event):
-        old = event.GetOldSelection()
-        new = event.GetSelection()
-        sel = self.GetSelection()
-        print 'OnPageChanging, old:%d, new:%d, sel:%d\n' % (old, new, sel)
+        self.gs.update_global_settings()
+        self.tabThree.update()
+        self.tabFive.update()
+        self.tabSix.update()
         event.Skip()
 
 ########################################################################
