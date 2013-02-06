@@ -17,35 +17,29 @@
 #
 
 import numpy
-import time
 import string
 
 class file_creator():
     def __init__(self):
         print "init"
 
-    def test_algorithm(self, ofdm_mode):
-        print "\n**************************"
-        print "test quantisation of timedomain values"
-        passed = 0
-        linecnt = 1
+    def test_algorithm(self, ofdm_mode, md, quantsize):
         g = 0.25
         size = 0
+        errors = 0
+        bitsinarray = 0
         
         if ofdm_mode == 8192:
             size = 6817
-            print "8k mode"
-
         elif ofdm_mode == 2048:
             size = 1705
-            print "2k mode"
 
         if g == 0:
             print "wrong guardinterval specified"
             return
 
         if size == 0:
-            print "wrong ofdm_mode"
+            print "wrong ofdmmode"
             return
 
         # init sinc filter
@@ -53,70 +47,63 @@ class file_creator():
         for i in range(0,32):
             sincarray.append(numpy.sinc((i-16)/2))
 
-        for i in range(0,8):
-            inarray = []
-            outarray = []
-            data_to_encode = []
-            for i in range(0, size):
-                bits = numpy.random.randint(3)*2+2
-                val = numpy.random.randint(64)
-                tmpsymbolA = symbol(bits)
-                tmpsymbolA.set_information(val)
-                tmpsymbolB = symbol(bits)
-                inarray.append(tmpsymbolA)
-                outarray.append(tmpsymbolB)
-                data_to_encode.append(tmpsymbolA.get_value())
+        inarray = []
+        outarray = []
+        data_to_encode = []
 
-            for i in range(0, ofdm_mode-size):
-                data_to_encode.append(numpy.complex64(0))
+        for i in range(0, size):
+            bits = md*2+2
+            bitsinarray += bits
+            val = numpy.random.randint(64)
+            tmpsymbolA = symbol(bits)
+            tmpsymbolA.set_information(val)
+            tmpsymbolB = symbol(bits)
+            inarray.append(tmpsymbolA)
+            outarray.append(tmpsymbolB)
+            data_to_encode.append(tmpsymbolA.get_value())
 
-            # move data to time domain
-            encoded_data = numpy.fft.ifft(numpy.fft.fftshift(data_to_encode))
+        for i in range(0, ofdm_mode-size):
+            data_to_encode.append(numpy.complex64(0))
 
-	    # quantification
-            maxval = 0
-            a = 256
+        # move data to time domain
+        encoded_data = numpy.fft.ifft(numpy.fft.fftshift(data_to_encode))
 
-            for tmp in encoded_data:
-                if abs(numpy.real(tmp)) > maxval:
-                    maxval = abs(numpy.real(tmp))
-                if abs(numpy.imag(tmp)) > maxval:
-                    maxval = abs(numpy.imag(tmp))
+        #maxval = 0
+        #for tmp in encoded_data:
+        #    if abs(numpy.real(tmp)) > maxval:
+        #        maxval = abs(numpy.real(tmp))
+        #    if abs(numpy.imag(tmp)) > maxval:
+        #        maxval = abs(numpy.imag(tmp))
+        
+        # quantification
+	quant_data = []
+        for tmp in encoded_data:
+            real = numpy.float(numpy.int32(numpy.real(tmp) * quantsize))
+            imag = numpy.float(numpy.int32(numpy.imag(tmp) * quantsize))
+            val = numpy.complex64(real / quantsize + imag / quantsize * 1j)
+            #print (val, tmp)
+            quant_data.append(val)
 
-            print "maxval: %f" % maxval
-            print "amplification for 8 bit: %d" % (128/maxval)
-            print "amplification for 10 bit: %d" % (512/maxval)
+        encoded_data = numpy.fft.ifftshift(numpy.fft.fft(quant_data))
 
-	    quant_data = []
-            for tmp in encoded_data:
-                real = numpy.float(numpy.int32(numpy.real(tmp) * a/maxval))
-                imag = numpy.float(numpy.int32(numpy.imag(tmp) * a/maxval))
-                val = numpy.complex64(real / a*maxval + imag / a * 1j*maxval)
-                #print (val, tmp)
-                quant_data.append(val)
-
-
-            encoded_data = numpy.fft.ifftshift(numpy.fft.fft(quant_data))
-
-            for i in range(0, size):
-                outarray[i].set_value(encoded_data[i])
-                #print ( outarray[i].get_value() , inarray[i].get_value())
-
-                if(outarray[i].get_information() == inarray[i].get_information() ):
-                    passed += 1
-
-            #print "%d pass" % (passed)
-
-        if passed == size*8:
-            print "All quantisation tests PASS\n"
+        #evaluate
+        for i in range(0, size):
+            outarray[i].set_value(encoded_data[i])
+            for j in range(0,outarray[i].get_bits()):
+                if( (outarray[i].get_information() & (2^j)) != (inarray[i].get_information() & (2^j)) ):
+                    errors += 1
+                    
+        print "errors %d out of %d = %3.2f %%" % (errors,bitsinarray,numpy.float(errors)/numpy.float(bitsinarray)*100)  
+        if errors == 0:
+            print "test PASS"
             return True
         else:
-            print "at least one quantisation test FAILED\n"
+            print "test FAILED"
             return False
 
 
 
-    
+# a symbol holds up to <bits> bits information
 class symbol():
     def __init__(self, bits):
         self.bits = bits
@@ -234,6 +221,18 @@ class symbol():
 if __name__ == '__main__':
     create_files = file_creator()
     alltestpass = True
-    for mode in [2048, 8192]:
-        alltestpass &= create_files.test_algorithm(mode)
+    print "\n**************************"
+    print "test quantisation of timedomain values"
+    for quantsize in [64,128,256,512,1024]:
+        for md in [0,1,2]:
+            for mode in [2048, 8192]:
+                print "\n**************************"
+                if md == 0:
+                    print "QPSK"
+                elif md == 1:
+                    print "16QAM"
+                elif md == 2:
+                    print "64QAM"
+    	        print "%d mode - %d quantsize " % (mode,quantsize)
+                alltestpass &= create_files.test_algorithm(mode, md, quantsize)
     print "All tests passed: %s" % alltestpass
