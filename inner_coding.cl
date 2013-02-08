@@ -28,7 +28,7 @@
 
                 TODO: use 32 bits per uint
  */
-__kernel void run_ic_A( __global uint *in, __global uint *out, const uint cr)
+__kernel void run_ic_A( __global const uint *in, __global uint *out, const uint cr)
 {
 	ulong workingreg;
 	uint resultreg;
@@ -54,9 +54,9 @@ __kernel void run_ic_A( __global uint *in, __global uint *out, const uint cr)
 		resultreg++;
 		if(workingreg & 0x0080000000UL)
 		resultreg++;
-		}
-		else
-		{
+	}
+	else
+	{
 		if(workingreg & 0x2000000000UL)
 		resultreg++;
 		if(workingreg & 0x1000000000UL)
