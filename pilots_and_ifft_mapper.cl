@@ -14,28 +14,54 @@
 #    You should have received a copy of the GNU General Public License along with this program; 
 #    if not, see <http://www.gnu.org/licenses/>.
 */
+
+#ifndef CONFIG_USE_DOUBLE
+#define CONFIG_USE_DOUBLE 0
+#endif
+
+#if CONFIG_USE_DOUBLE
+
+#if defined(cl_khr_fp64)  // Khronos extension available?
+#pragma OPENCL EXTENSION cl_khr_fp64 : enable
+#elif defined(cl_amd_fp64)  // AMD extension available?
+#pragma OPENCL EXTENSION cl_amd_fp64 : enable
+#endif
+
+/* double */
+typedef double real_t;
+typedef double2 real2_t;
+#define FFT_PI 3.14159265358979323846
+#define FFT_SQRT_1_2 0.70710678118654752440
+
+#else
+
+/* float */
+typedef float real_t;
+typedef float2 real2_t;
+#define FFT_PI       3.14159265359f
+#define FFT_SQRT_1_2 0.707106781187f
+
+#endif
+
 /*
- input float2
- output float2
+ input real2_t
+ output real2_t
  make sure that tpsbit=1 if (symbol == 0)
  *pilots contain information what to do on any carrier
-
  */
-
-
-
-__kernel void run( __global const float2 *in,  __global float2 *out, const uint *pilots, const uint tpsbit)
+#if 0
+__kernel void run( __global const real2_t *in,  __global real2_t *out, const uint *pilots, const uint tpsbit)
 {
 	uint i;
-	float2 *in_ptr = in;
-        uint generator = 2047;
+	real2_t *in_ptr = in;
+        uint generator = 2047;   
         uint pbrsbit, temp;
 
 	for(i = 0; i < get_global_size(0); i++)
 	{
-		/* pilot pbrs generator */
+		/* pilot pbrs generator, reinit every ofdm symbol */
         	pbrsbit = generator >> 10;
-        	temp = ((generator >> 10)&1)^((generator >> 8)&1);
+        	temp = ((generator >> 10)&1)^((generator >> 8)&1); /* polynomial x^11 + x^2 + 1 */
         	generator <<= 1;
         	generator |= (temp & 1);
         	generator &= 2047;
@@ -48,15 +74,49 @@ __kernel void run( __global const float2 *in,  __global float2 *out, const uint 
 				in_ptr++;
 			break;
 			case 1:	/* tpspilot */
-					*(out+i) = (float2)((1 - 2 * pbrsbit) * tpsbit, 0);
+					*(out+i) = (real2_t)((1 - 2 * pbrsbit) * tpsbit, 0);
 			break;
 			case 2:	/* continualpilot */
-					*(out+i) = (float2)((1 - 2 * pbrsbit) * 4.0 / 3.0 , 0);
+					*(out+i) = (real2_t)((1 - 2 * pbrsbit) * 4.0 / 3.0 , 0);
 			break;
 			case 3:	/* scatteredpilot */
-					*(out+i) = (float2)((1 - 2 * pbrsbit) * 4.0 / 3.0 , 0);
+					*(out+i) = (real2_t)((1 - 2 * pbrsbit) * 4.0 / 3.0 , 0);
 			break;
 		}
 	}
 }
+#endif
 
+__kernel void fill_continual( __global const real2_t *in,  __global real2_t *out,  __global const uint *pilots,  __global const uint *pbrsbits)
+{
+	uint carrier = pilots[get_global_id(0)];
+	
+	/* continualpilot */
+	
+	out[carrier] = (real2_t)((1 - 2 * pbrsbits[carrier]) * 4.0 / 3.0 , 0);
+}
+
+__kernel void fill_tps( __global const real2_t *in,  __global real2_t *out,  __global const uint *pilots,  __global const uint *pbrsbits, const uint tpsbit)
+{
+	uint carrier = pilots[get_global_id(0)];
+
+	/* tpspilot */
+	
+	out[carrier] = (real2_t)((1 - 2 * pbrsbits[carrier]) * tpsbit, 0);
+}
+
+__kernel void fill_scattered( __global const real2_t *in,  __global real2_t *out,  __global const uint *pilots,  __global const uint *pbrsbits)
+{
+	uint carrier = pilots[get_global_id(0)];
+
+	/* scatteredpilot */
+	
+	out[carrier] = (real2_t)((1 - 2 * pbrsbits[carrier]) * 4.0 / 3.0 , 0);
+}
+
+__kernel void fill_data( __global const real2_t *in,  __global real2_t *out,  __global const uint *pilots)
+{
+	uint carrier = pilots[get_global_id(0)];
+	
+	out[carrier] = in[get_global_id(0)];
+}
