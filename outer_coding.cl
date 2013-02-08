@@ -23,7 +23,7 @@
    data out    : 204 bytes * T (51 uints) little endian
 */
 
-__kernel void run_pbrs_rs( __global uint *in, __global uint *out)
+__kernel void run_pbrs_rs( __global const uint *in, __global uint *out)
 {
 
 uint workingreg[51];
@@ -628,7 +628,7 @@ for(i=0;i<51;i++)
 */
 
 
-__kernel void run_oi_A( __global uint *in, __global uint *out )
+__kernel void run_oi_A( __global const uint *in, __global uint *out )
 {
  uint tmp;
  switch(get_global_id(0)%3)
