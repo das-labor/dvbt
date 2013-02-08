@@ -12,7 +12,9 @@
 // fftRadix2Kernel x, y , 16 [Threadcount = 16]
 // fftswaprealimag y [Threadcount = 32]
 
+#ifndef CONFIG_USE_DOUBLE
 #define CONFIG_USE_DOUBLE 0
+#endif
 
 #if CONFIG_USE_DOUBLE
 
