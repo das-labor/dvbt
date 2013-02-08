@@ -16,6 +16,12 @@
 import wx
 import pyopencl as cl
 import DVBT
+import os
+import string
+try:
+    import threading
+except ImportError, e:
+    raise Exception("Failed to import module 'threading'")
 
 ########################################################################
 class GlobalSettings():
@@ -50,7 +56,8 @@ class GlobalSettings():
         self.ctx = None
         self.symbolspersecondwritten = 0
     	self.totalsymbolswritten = 0
-    	
+    	self.logofilename = "./logo.ts"
+    	        
     def update_global_settings(self):
     	if self.ctx is None:
     	    ctx = cl.create_some_context(interactive=False)
@@ -115,28 +122,6 @@ class TabPaneldvbtSettings(wx.Panel):
         self.editalpha = wx.ComboBox(self, pos=(220, 210), size=(95, -1), choices=self.alphaList, style=wx.CB_READONLY, value="1")
         self.Bind(wx.EVT_COMBOBOX, self.EvtComboBoxalpha, self.editalpha)
 
-
-        # label X displays
-        self.lblX11displays = wx.StaticText(self, label="X11 displays:", pos=(10, 490))
-
-	# the combobox channel list
-        self.x11displays = ['bla']
-        #platform = pyglet.window.get_platform()
-        #display = platform.get_default_display()
-        #for displaystring in [':0.0',':0.1',':0.2']:
-            #try:
-                #display = platform.get_display(displaystring)
-                #for screen in display.get_screens():
-                    #self.x11displays.append("%s" % screen)
-            #except:
-                #break
-        #if len(self.x11displays) == 0:
-           #print "Error, no X11 display found"
-           #return
-        self.editx11displays = wx.ComboBox(self, pos=(220, 480), size=(400, -1), choices=self.x11displays, style=wx.CB_READONLY, value=self.x11displays[0])
-        self.Bind(wx.EVT_COMBOBOX, self.Evtx11displays, self.editx11displays)
-
-
         self.Bind(wx.EVT_CLOSE, self.EvtClose)
 
 
@@ -185,10 +170,7 @@ class TabPaneldvbtSettings(wx.Panel):
             self.gs.modulation = 4
         if event.GetString() == "64-QAM":
             self.gs.modulation = 6
-        
-    def Evtx11displays(self, event):
-        self.x11displaystring = event.GetString()
-
+            
     def EvtComboBoxalpha(self, event):
         self.gs.alpha = int(event.GetString())
 
@@ -215,7 +197,8 @@ class TabPanelMain(wx.Panel):
         self.cbtransmitlogo.SetValue(True)
         
         # text box for logo file name
-        self.TextCtrllogofile = wx.TextCtrl(self, pos=(200,60), size=(300,-1), value="./logo.png" )
+        self.TextCtrllogofile = wx.TextCtrl(self, pos=(200,60), size=(300,-1), value="./logo.ts" )
+        self.Bind(wx.EVT_TEXT, self.EvtTextlogo, self.TextCtrllogofile)
         
         self.rb1 = wx.RadioButton(self, -1, 'write to file/fifo', (10, 120), style=wx.RB_GROUP)
         self.rb2 = wx.RadioButton(self, -1, 'output using opengl', (10, 150))
@@ -243,10 +226,16 @@ class TabPanelMain(wx.Panel):
         self.buttonoutputfile =wx.Button(self, label="Choose output file", pos=(20, 290))
         self.Bind(wx.EVT_BUTTON, self.OnClickButtonOutput,self.buttonoutputfile)
 	
-        # the button (re)start
-        self.buttonstart =wx.Button(self, label="(Re)Start", pos=(420, 300))
+        # the button start
+        self.buttonstart =wx.Button(self, label="(Re)Start", pos=(250, 300))
         self.Bind(wx.EVT_BUTTON, self.OnClickButtonStart,self.buttonstart)
         
+        # the button stop
+        self.buttonstop =wx.Button(self, label="Stop", pos=(400, 300))
+        self.Bind(wx.EVT_BUTTON, self.OnClickButtonStop,self.buttonstop)
+        
+        self.thread_event = threading.Event()
+                
     def OnClickButtonStart(self,event):
         print "bandwidth %f" % self.gs.bandwidth
         print "coderate %f" % self.gs.coderate
@@ -265,7 +254,41 @@ class TabPanelMain(wx.Panel):
         print "outputfile %s" % self.gs.outputfile
         print "write outputfile %f" % self.gs.writeoutputfile
         print "radio freq %f" % self.gs.radiofreq
-          
+        if self.gs.logofilename[0] == ".":
+            self.gs.logofilename = "%s%s" % (os.getcwd(), string.lstrip(self.gs.logofilename,"."))
+        print "logo file %s" % self.gs.logofilename            
+        self.gs.update_global_settings()
+        self.thread_event.clear()
+
+        if self.cbtransmitlogo.GetValue() or self.gs.inputfile:
+            self.workingthread_in = threading.Thread(target=self.worker_thread_in)            
+            self.workingthread_out = threading.Thread(target=self.worker_thread_out)
+            self.workingthread_out.start()
+            self.workingthread_in.start()
+            self.gs.dvbt_encoder.run()
+            
+    def OnClickButtonStop(self,event):
+        self.thread_event.set()
+        self.gs.dvbt_encoder.stop()
+        
+    def worker_thread_in(self):
+        inputfifo = self.gs.dvbt_encoder.get_input_fifo()
+        
+        fifo = open(inputfifo, 'w')
+        while not self.thread_event.isSet():
+            logo = open(self.gs.logofilename, 'r')
+            fifo.write(logo.read())
+            logo.close()
+        fifo.close()
+        
+    def worker_thread_out(self):
+        outputfifo = self.gs.dvbt_encoder.get_output_fifo()
+
+        fifo = open(outputfifo, 'r')
+        while not self.thread_event.isSet():
+            fifo.read(255)
+        fifo.close()
+        
     def RadioButtonEvent(self, event):
         self.TextCtrloutputfile.SetEditable(self.rb1.GetValue())
         self.gs.writeoutputfile = self.rb1.GetValue()
@@ -294,12 +317,8 @@ class TabPanelMain(wx.Panel):
             self.gs.outputfile = outputfile
 	dialog.Destroy()
 
-
-        #self.logger.AppendText("New Settings:\n")
-
-        #self.logger.AppendText("Usable Bitrate: %sbit/sec\n" % self.toUnits(self.usablebitrate))
-        #self.logger.AppendText("Channel symbolRate: %sS/sec\n" % self.toUnits(self.symbolrate))
-
+    def EvtTextlogo(self, event):
+        self.gs.logofilename = event.GetString()
 
         
 ########################################################################
