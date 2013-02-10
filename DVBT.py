@@ -43,6 +43,11 @@ try:
 except ImportError, e:
     raise Exception("Failed to import module 'os'")
 
+try:
+    import string
+except ImportError, e:
+    raise Exception("Failed to import module 'string'")
+    
 class Encoder:
     def __init__(self, ctx=None, mode=2048, bandwidth=8, modulation=2, coderate=0.5, guardinterval=0.25, alpha=1, cellid=0):
 
@@ -74,23 +79,23 @@ class Encoder:
 
         # locks the opencl access
         self.cl_thread_lock = threading.Lock()
-
+        self.event = None
 
         ######################################
         # create input and output fifos
 
-        tmpdir = tempfile.mkdtemp()
-        self.inputfd = os.path.join(tmpdir, 'dvbtinputfifo')
-        try:
-            os.mkfifo(self.inputfd)
-        except OSError, e:
-            raise Exception("Failed to create FIFO: %s" % e)
+        #tmpdir = tempfile.mkdtemp()
+        #self.inputfd = os.path.join(tmpdir, 'dvbtinputfifo')
+        #try:
+        #    os.mkfifo(self.inputfd)
+        #except OSError, e:
+        #    raise Exception("Failed to create FIFO: %s" % e)
 
-        self.outputfd = os.path.join(tmpdir, 'dvbtoutputfifo')
-        try:
-            os.mkfifo(self.outputfd)
-        except OSError, e:
-            raise Exception("Failed to create FIFO: %s" % e)
+        #self.outputfd = os.path.join(tmpdir, 'dvbtoutputfifo')
+        #try:
+        #    os.mkfifo(self.outputfd)
+        #except OSError, e:
+        #    raise Exception("Failed to create FIFO: %s" % e)
 
 	# save the opencl context
         self.ctx = ctx
@@ -136,7 +141,8 @@ class Encoder:
         #self.ofdmsymbollength = self.ofdmsymbollengthuseful + self.ofdmguardintervallength
         self.ofdmsymbolspersecond = self.symbolrate / (self.ofdmmode *  (1 + self.guardinterval))
         #self.ofdmframespersecond = self.ofdmsymbolspersecond / self.symbolsperframe
-
+        self.symbolspersuperframe = self.ofdmmode *  (1 + self.guardinterval) * self.framespersuperframe * self.symbolsperframe
+        
         # stats
         self.totalsymbolswritten = 0
         self.symbolswrittentofifo = 0
@@ -556,11 +562,11 @@ class Encoder:
             print "inner interleaver %d " % int(self.bitspersuperframe/(self.modulation*127))
             print "symbol mapper %d " % int(self.bitspersuperframe*2/self.modulation)
             
-    def get_input_fifo(self):
-        return self.inputfd
+    #def get_input_fifo(self):
+    #    return self.inputfd
 
-    def get_output_fifo(self):
-        return self.outputfd
+    #def get_output_fifo(self):
+    #    return self.outputfd
 
     def get_symbolrate(self):
         return self.symbolrate
@@ -570,56 +576,59 @@ class Encoder:
 
     def get_tspacketspersecond(self):
         return self.tspacketspersecond
+        
+    def get_tspacketspersuperframe(self):
+        return self.tspacketspersuperframe
 
     def get_ofdmsymbolspersecond(self):
         return self.ofdmsymbolspersecond
 
     def get_bytespersuperframe(self):
         return self.bytespersuperframe
-
-    def get_symbolspersecondwritten(self):
-        return self.symbolswrittentofifo
         
-    def get_totalsymbolswritten(self):
-        return self.totalsymbolswritten     
+    def get_symbolspersuperframe(self):
+        return self.symbolspersuperframe
+        
+    def get_symbolswritten(self):
+    	#self.cl_thread_lock.acquire()
+        return self.symbolcounter
+        #self.cl_thread_lock.release()
+        
+    #def get_totalsymbolswritten(self):
+    #    return self.totalsymbolswritten     
 
-    def stop(self):
-        self.thread_event.set()
-        try:
-            self.workingthread.join(10)
-        except:
-            pass
-        try:
-            self.timerobj.cancel()
-        except:
-            pass
+    #def is_running(self):
+    #    return self.workingthread.isAlive()  
+        
+    #def stop(self):
+    #    self.thread_event.set()
+    #    try:
+    #        self.workingthread.join(10)
+    #    except:
+    #        pass
+    #    try:
+    #        self.timerobj.cancel()
+    #    except:
+    #        pass
 
-    def run(self):
-        self.thread_event.clear()
-        self.workingthread = threading.Thread(target=self.worker_thread)
-        self.workingthread.start()
-        self.timerobj = threading.Timer(1.0, self.update_timer)
-        self.timerobj.start()
-
-    def update_timer(self):
-        self.cl_thread_lock.acquire()
-        print self.symbolcounter
-        print self.totalsymbolswritten        
-        self.symbolswrittentofifo = self.symbolcounter
-        self.totalsymbolswritten += self.symbolcounter
-        self.symbolcounter = 0
-        self.cl_thread_lock.release()
-
-        self.timerobj = threading.Timer(1.0, self.update_timer)
-        self.timerobj.start()
+    #def run(self):
+    #    self.thread_event.clear()
+    #    self.workingthread = threading.Thread(target=self.worker_thread)
+    #    self.workingthread.start()
 
     def memset(self, buf, val, length, event):
     	data = numpy.array([val] * length, dtype=numpy.uint8)
     	if event is None:
-            return cl.enqueue_copy( self.queue, buf, data, is_blocking=False )
+    	    self.cl_thread_lock.acquire()
+    	    event = cl.enqueue_copy( self.queue, buf, data, is_blocking=False )
+    	    self.cl_thread_lock.release()
+            return event
         else:
-            return cl.enqueue_copy( self.queue, buf, data, wait_for=[event], is_blocking=False )
-            
+            self.cl_thread_lock.acquire()
+            event = cl.enqueue_copy( self.queue, buf, data, wait_for=[event], is_blocking=False )
+            self.cl_thread_lock.release()
+            return event
+    
     def BCH_127_113_2(self,data): 
     	temp = list(data)
     	if len(temp) < 113:
@@ -651,34 +660,61 @@ class Encoder:
 		bb[0] = 0
 	    i -= 1
 	return bb
-	
-    def worker_thread(self):
-        event = None
-        inputfifo = open(self.inputfd,"r")
-        outputfifo = open(self.outputfd,"w")
+
+    #input_buf has to be a string, dest_buf has to be a opencl buffer
+    def enqueue_copy_to_device(self, input_buf, dest_buf):
+    	self.cl_thread_lock.acquire()
+    	if self.event is not None:
+            self.event = cl.enqueue_copy( self.queue, dest_buf, numpy.fromstring(input_buf, dtype=numpy.uint32), wait_for=[self.event], is_blocking=False )
+    	else:
+            self.event = cl.enqueue_copy( self.queue, dest_buf, numpy.fromstring(input_buf, dtype=numpy.uint32), is_blocking=False )            
+        self.cl_thread_lock.release()
+        return self.event
+        
+    #input_buf has to be a opencl buffer, dest_buf has to be a string
+    def enqueue_copy_to_host(self, input_buf, dest_buf):
+    	self.cl_thread_lock.acquire()
+    	if self.event is not None:
+    	    self.event = cl.enqueue_copy( self.queue, dest_buf, input_buf, wait_for=[self.event], is_blocking=False ) 
+    	else:
+    	    self.event = cl.enqueue_copy( self.queue, dest_buf, input_buf, is_blocking=False )     		
+        self.cl_thread_lock.release()
+        return self.event
+        
+    #input_buf has to be a opencl buffer
+    def encode_superframe(self,input_buf,dest_buf):
+    	event = None
+        copyevent = None
+        
+        #inputfifo = open(self.inputfd,"r")
+        #outputfifo = open(self.outputfd,"w")
 
         self.symbolcounter = 0
-        encoded_data = numpy.array(numpy.zeros(self.ofdmmode * (1+self.guardinterval) * 2 * self.framespersuperframe * self.symbolsperframe) ,dtype=numpy.int32)
+        #encoded_data = numpy.array(numpy.zeros(self.ofdmmode * (1+self.guardinterval) * 2 * self.framespersuperframe * self.symbolsperframe) ,dtype=numpy.int32)
+        #if len(input_buf) < (self.tspacketspersuperframe * self.bytespertspacket):
+        #    return 0
         
-        
-	event = self.memset(self.dest_buf_A, 0, 11*17, event)
+	event = self.memset(self.dest_buf_A, 0, 11*17, self.event)
 	event = self.memset(self.dest_buf_B, 0, 4, event)
 
-        while not self.thread_event.isSet():
+        #while not self.thread_event.isSet():
+        if 1:
             # read data from fifo
-            tspacket = inputfifo.read( int(self.tspacketspersuperframe * self.bytespertspacket) )
-            if len(tspacket) == 0:
-                break
+            #tspacket = inputfifo.read( int(self.tspacketspersuperframe * self.bytespertspacket) )
+            #if len(tspacket) == 0:
+            #    break
 
             #copy to CL device, the more the better
-            event = cl.enqueue_copy( self.queue, self.cl_input_buf, numpy.fromstring(tspacket, dtype=numpy.uint32), wait_for=[event] )
-
+            #event = cl.enqueue_copy( self.queue, self.cl_input_buf, numpy.fromstring(input_buf[:self.tspacketspersuperframe * self.bytespertspacket], dtype=numpy.uint32), wait_for=[event], is_blocking=False )
+            #input_buf = input_buf[len(input_buf)-self.tspacketspersuperframe * self.bytespertspacket:]
+            
             # ockernelA: pbrs, rs-encoder
             #  encode all ts packet per superframe at once
             #  input is litte endian, output is litte endian
             #  in: $x * 188 bytes, out: $x * 204 bytes
-
-            self.ockernelA.set_args(self.cl_input_buf, self.dest_buf_A)
+            
+            #self.ockernelA.set_args(self.cl_input_buf, self.dest_buf_A)
+            self.ockernelA.set_args(input_buf, self.dest_buf_A)            
             event = cl.enqueue_nd_range_kernel( self.queue, self.ockernelA, (int(self.tspacketspersuperframe),), None, wait_for=[event] )         
 
             # ockernelB: convolutional interleaver:
@@ -719,7 +755,7 @@ class Encoder:
             #  store as real2_t
 
             self.smkernel.set_args(self.dest_buf_D, self.dest_buf_E, numpy.uint32(self.modulation))
-            event = cl.enqueue_nd_range_kernel( self.queue,self.smkernel, (int(self.bitspersuperframe*2/self.modulation),), None, wait_for=[event] )
+            event = cl.enqueue_nd_range_kernel( self.queue,self.smkernel, (int(self.bitspersuperframe/self.modulation),), None, wait_for=[event] )
 
             for symbol in range(0, self.symbolsperframe):
                 for frame in range(0, self.framespersuperframe):
@@ -830,27 +866,40 @@ class Encoder:
                     #  threadcount: ofdm_mode * (1+self.guardinterval)
                     #  input is ofdm_mode real2_t, output is ofdm_mode int2, const <factor to scale>, const <dest buffer offset>
                     destoffset = (self.ofdmmode * (1+self.guardinterval) ) * (frame+symbol*self.framespersuperframe) #* self.sizeofreal2_t
-                    self.quantisationKernel.set_args(self.dest_buf_J, self.cl_output_buf, numpy.int32(self.ofdmmode), numpy.int32(destoffset) )
+                    #self.quantisationKernel.set_args(self.dest_buf_J, self.cl_output_buf, numpy.int32(self.ofdmmode), numpy.int32(destoffset) )
+                    self.quantisationKernel.set_args(self.dest_buf_J, dest_buf, numpy.int32(self.ofdmmode), numpy.int32(destoffset) )                    
                     event = cl.enqueue_nd_range_kernel(self.queue, self.quantisationKernel,(int(self.ofdmmode * (1+self.guardinterval)),), None, wait_for=[event])
                     
-                    self.cl_thread_lock.acquire()
-                    self.symbolcounter += 2 * self.ofdmmode * (1+self.guardinterval)
-                    self.cl_thread_lock.release()
+                    #self.cl_thread_lock.acquire()
+                    self.symbolcounter += 2 * self.ofdmmode * (1+self.guardinterval) 
+                    #self.cl_thread_lock.release()
 
             #copy superframe at once
-            event = cl.enqueue_copy( self.queue, encoded_data, self.cl_output_buf, wait_for=[event] ) # waits for completition by default
-
-            outputfifo.write(encoded_data)
-            
-        event.wait()
-        inputfifo.close()
-        outputfifo.close()
+            #if copyevent is not None:
+            #    copyevent.wait()
+            #event = cl.enqueue_copy( self.queue, encoded_data, self.cl_output_buf, wait_for=[event], is_blocking=True ) # waits for completition by default
+            #cl_buf_to_host_t = threading.Thread(target=self.cl_buf_to_host_thread,args = (copyevent,encoded_data,outputfifo) )
+            #cl_buf_to_host_t.start()
+            #try:
+                #outputfifo.write(encoded_data)
+            #except:
+            #	self.thread_event.set()
+            	
+        #event.wait()
+        self.event = event
+        #inputfifo.close()
+        #outputfifo.close()
         
-        self.cleanup()
-
+        #self.cleanup()
+        #return encoded_data
+        return self.event
+        
+    #def cl_buf_to_host_thread(self,copyevent,encoded_data,outputfifo):
+    #	copyevent.wait()
+    #    outputfifo.write(encoded_data)
 
     def cleanup(self):
-        print "bla"
+        self.thread_event.set()
 
 
 class Kernelhelper:
