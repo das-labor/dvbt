@@ -18,6 +18,8 @@ import pyopencl as cl
 import DVBT
 import os
 import string
+import numpy
+
 try:
     import threading
 except ImportError, e:
@@ -57,17 +59,22 @@ class GlobalSettings():
         self.symbolspersecondwritten = 0
     	self.totalsymbolswritten = 0
     	self.logofilename = "./logo.ts"
+    	self.dvbt_encoder = None
     	        
     def update_global_settings(self):
     	if self.ctx is None:
     	    ctx = cl.create_some_context(interactive=False)
     	else:
     	    ctx = self.ctx
+    	
+    	#if self.dvbt_encoder is not None:
+    	#    if self.dvbt_encoder.is_running():
+    	#        return
         self.dvbt_encoder = DVBT.Encoder(ctx, self.odfmmode, self.bandwidth, self.modulation, self.coderate, self.guardinterval, self.alpha, self.cellid)
 
         self.symbolrate = self.dvbt_encoder.get_symbolrate()
         self.usablebitrate = self.dvbt_encoder.get_usablebitrate()
-        self.symbolspersecondwritten = self.dvbt_encoder.get_symbolspersecondwritten()
+        #self.symbolspersecondwritten = self.dvbt_encoder.get_symbolspersecondwritten()
         
 ########################################################################
 class TabPaneldvbtSettings(wx.Panel):
@@ -235,6 +242,7 @@ class TabPanelMain(wx.Panel):
         self.Bind(wx.EVT_BUTTON, self.OnClickButtonStop,self.buttonstop)
         
         self.thread_event = threading.Event()
+        self.thread_lock = threading.Lock()
                 
     def OnClickButtonStart(self,event):
         print "bandwidth %f" % self.gs.bandwidth
@@ -261,33 +269,56 @@ class TabPanelMain(wx.Panel):
         self.thread_event.clear()
 
         if self.cbtransmitlogo.GetValue() or self.gs.inputfile:
-            self.workingthread_in = threading.Thread(target=self.worker_thread_in)            
-            self.workingthread_out = threading.Thread(target=self.worker_thread_out)
-            self.workingthread_out.start()
-            self.workingthread_in.start()
-            self.gs.dvbt_encoder.run()
+            self.buffersize = 3
+            self.cl_inputbuffer_array = [cl.Buffer(self.gs.ctx, cl.mem_flags.READ_ONLY, size=int(self.gs.dvbt_encoder.get_tspacketspersuperframe() * 188) )] * self.buffersize 
+            self.cl_outputbuffer_array = [cl.Buffer(self.gs.ctx, cl.mem_flags.WRITE_ONLY, size=int(self.gs.dvbt_encoder.get_symbolspersuperframe() * 8) )] * self.buffersize 
+            self.cl_inputevent_array = [None] * self.buffersize
+            self.cl_outputevent_array = [None] * self.buffersize       
+            self.workingthread = threading.Thread(target=self.worker_thread)            
+            self.workingthread.start()
+
             
     def OnClickButtonStop(self,event):
         self.thread_event.set()
-        self.gs.dvbt_encoder.stop()
-        
-    def worker_thread_in(self):
-        inputfifo = self.gs.dvbt_encoder.get_input_fifo()
-        
-        fifo = open(inputfifo, 'w')
-        while not self.thread_event.isSet():
-            logo = open(self.gs.logofilename, 'r')
-            fifo.write(logo.read())
-            logo.close()
-        fifo.close()
-        
-    def worker_thread_out(self):
-        outputfifo = self.gs.dvbt_encoder.get_output_fifo()
 
-        fifo = open(outputfifo, 'r')
+    def worker_thread(self):
+        #fifo = open(inputfifo, 'w')
+
+        self.str_inputbuf= ""
+        encoded_data = numpy.array(numpy.zeros(self.gs.dvbt_encoder.get_symbolspersuperframe() * 2) ,dtype=numpy.int32)
+
+        for i in range(0,self.buffersize):
+            self.cl_inputevent_array[i] = self.gs.dvbt_encoder.enqueue_copy_to_device(self.get_input_buf(), self.cl_inputbuffer_array[i])
+            
+        for i in range(0,self.buffersize):
+            self.cl_inputevent_array[i].wait()
+        
         while not self.thread_event.isSet():
-            fifo.read(255)
-        fifo.close()
+            for i in range(0,self.buffersize):
+                self.cl_inputevent_array[i].wait()
+                if self.cl_outputevent_array[i] is not None:
+                    self.cl_outputevent_array[i].wait()
+                
+                self.gs.dvbt_encoder.encode_superframe(self.cl_inputbuffer_array[i],self.cl_outputbuffer_array[i])
+                #enqueue a transfer
+                self.cl_inputevent_array[i] = self.gs.dvbt_encoder.enqueue_copy_to_device(self.get_input_buf(), self.cl_inputbuffer_array[i])
+                self.cl_outputevent_array[i] = self.gs.dvbt_encoder.enqueue_copy_to_host(self.cl_outputbuffer_array[i],encoded_data )
+
+                print "#"
+        #fifo.close()
+        
+    def get_input_buf(self):
+        tmp = ""
+        logo = open(self.gs.logofilename, 'r')
+        logo_array = logo.read()
+        logo.close()
+     	bytestocopy = self.gs.dvbt_encoder.tspacketspersuperframe * 188
+        while len(self.str_inputbuf) < bytestocopy:
+            self.str_inputbuf = "%s%s" % (self.str_inputbuf,logo_array)
+        tmp = self.str_inputbuf[:bytestocopy]
+        self.str_inputbuf = self.str_inputbuf[len(self.str_inputbuf)-bytestocopy:]
+        return tmp
+      
         
     def RadioButtonEvent(self, event):
         self.TextCtrloutputfile.SetEditable(self.rb1.GetValue())
@@ -498,15 +529,19 @@ class TabPanelopenclsettings(wx.Panel):
             
         self.gs.clplatform =  cl.get_platforms()[0]
         self.gs.clcomputedevice = self.gs.clplatform.get_devices()[0]
+        self.gs.ctx = cl.Context(devices=[self.gs.clcomputedevice], properties=None, dev_type=None)
         
-        for any_platform in cl.get_platforms():
-            for found_device in any_platform.get_devices():
-                if found_device.type == 4 :
-                    computedeviceList.append("GPU: %s" % found_device.name)
-                if found_device.type == 2 :
-                    computedeviceList.append("CPU: %s" % found_device.name)
-            break
+        any_platform = cl.get_platforms()[0]
+        for found_device in any_platform.get_devices():
+            if found_device.type == 4 :
+                computedeviceList.append("GPU: %s" % found_device.name)
+            elif found_device.type == 2 :
+                computedeviceList.append("CPU: %s" % found_device.name)
+            else:
+                computedeviceList.append("???: %s" % found_device.name)
 
+
+	
 	# the combobox cl platform
         self.editclplatform = wx.ComboBox(self, pos=(160, 30), size=(350, -1), choices=clplatformList, style=wx.CB_READONLY, value=clplatformList[0])
         self.Bind(wx.EVT_COMBOBOX, self.EvtComboBoxclplatform, self.editclplatform)
@@ -532,10 +567,10 @@ class TabPanelopenclsettings(wx.Panel):
                        computedeviceList.append("CPU: %s" % found_device.name)
                break
        self.editcomputedevice.choices = computedeviceList
-       
+       self.gs.ctx = cl.Context(devices=[self.gs.clcomputedevice], properties=None, dev_type=None)
+       	
     def EvtComboBoxcomputedevice(self, event):
        self.computedevice = event.GetString().split(':')[1].strip()
-       
 
 ########################################################################
 class Notebookdvbt(wx.Notebook):
@@ -620,3 +655,5 @@ if __name__ == '__main__':
     #panel = MainPanel(frame)
     #frame.Show()
     app.MainLoop()
+    
+
