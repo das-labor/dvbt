@@ -19,7 +19,7 @@ import DVBT
 import os
 import string
 import numpy
-
+import time
 try:
     import threading
 except ImportError, e:
@@ -269,7 +269,7 @@ class TabPanelMain(wx.Panel):
         self.thread_event.clear()
 
         if self.cbtransmitlogo.GetValue() or self.gs.inputfile:
-            self.buffersize = 3
+            self.buffersize = 5
             self.cl_inputbuffer_array = [cl.Buffer(self.gs.ctx, cl.mem_flags.READ_ONLY, size=int(self.gs.dvbt_encoder.get_tspacketspersuperframe() * 188) )] * self.buffersize 
             self.cl_outputbuffer_array = [cl.Buffer(self.gs.ctx, cl.mem_flags.WRITE_ONLY, size=int(self.gs.dvbt_encoder.get_symbolspersuperframe() * 8) )] * self.buffersize 
             self.cl_inputevent_array = [None] * self.buffersize
@@ -295,16 +295,16 @@ class TabPanelMain(wx.Panel):
         
         while not self.thread_event.isSet():
             for i in range(0,self.buffersize):
-                self.cl_inputevent_array[i].wait()
-                if self.cl_outputevent_array[i] is not None:
-                    self.cl_outputevent_array[i].wait()
-                
-                self.gs.dvbt_encoder.encode_superframe(self.cl_inputbuffer_array[i],self.cl_outputbuffer_array[i])
+                #self.cl_inputevent_array[i].wait()
+                #if self.cl_outputevent_array[i] is not None:
+                #    self.cl_outputevent_array[i].wait()
+                t = time.time() 
+                self.gs.dvbt_encoder.encode_superframe(self.cl_inputbuffer_array[i],self.cl_outputbuffer_array[i],self.cl_inputevent_array[i])
+                print "execution time %f " % (time.time() -t)
                 #enqueue a transfer
                 self.cl_inputevent_array[i] = self.gs.dvbt_encoder.enqueue_copy_to_device(self.get_input_buf(), self.cl_inputbuffer_array[i])
                 self.cl_outputevent_array[i] = self.gs.dvbt_encoder.enqueue_copy_to_host(self.cl_outputbuffer_array[i],encoded_data )
-
-                print "#"
+                
         #fifo.close()
         
     def get_input_buf(self):
