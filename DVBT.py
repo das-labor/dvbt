@@ -79,7 +79,8 @@ class Encoder:
 
         # locks the opencl access
        # self.cl_thread_lock = threading.Lock()
-
+        self.event = None
+        
 	# save the opencl context
         self.ctx = ctx
 
@@ -128,9 +129,11 @@ class Encoder:
         #self.ofdmsymbol_useful = (1 / self.symbolrate) * self.ofdmmode
         #self.ofdmguardintervallength = (1 / self.symbolrate) * self.ofdmmode * self.guardinterval
         #self.ofdmsymbollength = self.ofdmsymbollengthuseful + self.ofdmguardintervallength
-        self.ofdmsymbolspersecond = self.symbolrate / (self.ofdmmode *  (1 + self.guardinterval))
+        self.ofdmmode_guardint = self.ofdmmode  * (1+self.guardinterval) 
+        self.ofdmsymbolspersecond = self.symbolrate / self.ofdmmode_guardint
         #self.ofdmframespersecond = self.ofdmsymbolspersecond / self.symbolsperframe
-        self.symbolspersuperframe = self.ofdmmode *  (1 + self.guardinterval) * self.framespersuperframe * self.symbolsperframe
+        self.symbolspersuperframe = self.ofdmmode_guardint * self.framespersuperframe * self.symbolsperframe
+
         
         # stats
         self.totalsymbolswritten = 0
@@ -518,7 +521,7 @@ class Encoder:
         
         # output buffer for ifft guardinterval
         # size=self.ofdmmode * sizeof(real2_t) * (1+guardinterval)
-        self.dest_buf_J = [cl.Buffer( self.ctx, cl.mem_flags.READ_WRITE, int(self.ofdmmode * self.sizeofreal2_t * (1+self.guardinterval)) )] * self.ofdmsymbolspersuperframe
+        self.dest_buf_J = [cl.Buffer( self.ctx, cl.mem_flags.READ_WRITE, int( self.ofdmmode_guardint * self.sizeofreal2_t ) )] * self.ofdmsymbolspersuperframe
         
         # output buffer for all ifft guardinterval
         # size=self.ofdmmode * sizeof(real2_t) * (1+guardinterval)
@@ -622,14 +625,14 @@ class Encoder:
     def memset(self, buf, val, length, event):
     	data = numpy.array([val] * length, dtype=numpy.uint8)
     	if event is None:
-    	    self.cl_thread_lock.acquire()
+    	    #self.cl_thread_lock.acquire()
     	    event = cl.enqueue_copy( self.queue, buf, data, is_blocking=False )
-    	    self.cl_thread_lock.release()
+    	    #self.cl_thread_lock.release()
             return event
         else:
-            self.cl_thread_lock.acquire()
+            #self.cl_thread_lock.acquire()
             event = cl.enqueue_copy( self.queue, buf, data, wait_for=[event], is_blocking=False )
-            self.cl_thread_lock.release()
+            #self.cl_thread_lock.release()
             return event
     
     def BCH_127_113_2(self,data): 
@@ -857,13 +860,13 @@ class Encoder:
 	    # quantisationKernel: convert complex number real2_t to int2, multiplies each value with p
 	    #  threadcount: ofdm_mode * (1+self.guardinterval)
 	    #  input is ofdm_mode real2_t, output is ofdm_mode int2, const <factor to scale>, const <dest buffer offset>
-	    destoffset = (self.ofdmmode * (1+self.guardinterval) ) * (frame+symbol*self.framespersuperframe) #* self.sizeofreal2_t
+	    destoffset = self.ofdmmode_guardint * (frame+symbol*self.framespersuperframe) #* self.sizeofreal2_t
 	    #self.quantisationKernel.set_args(self.dest_buf_J, self.cl_output_buf, numpy.int32(self.ofdmmode), numpy.int32(destoffset) )
 	    self.quantisationKernel.set_args(self.dest_buf_J[j], dest_buf, self.np_int32_ofdmmode, numpy.int32(destoffset) )                    
 	    event = cl.enqueue_nd_range_kernel(self.queue, self.quantisationKernel,(int(self.ofdmmode * (1+self.guardinterval)),), None, wait_for=[eventA,eventB])
 	
 	    #self.cl_thread_lock.acquire()
-	    self.symbolcounter += 2 * self.ofdmmode * (1+self.guardinterval) 
+	    self.symbolcounter += 2 * self.ofdmmode_guardint
 	    #self.cl_thread_lock.release()
 	    
 	    return event
