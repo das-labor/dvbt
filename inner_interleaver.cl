@@ -20,7 +20,7 @@
   inner interleaver
  interleave modulation * 127 bits at once
  */
-__kernel void run_ii_A( __global const uint *in, __global uint *out, const uint mod)
+__kernel void run_ii_A( __global const uint *in, __global uint *out, const int mod)
 {
 	 local int row[6][127];
 	 int i= get_global_id(0);
