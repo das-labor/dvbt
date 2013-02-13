@@ -129,7 +129,7 @@ class Encoder:
         #self.ofdmsymbol_useful = (1 / self.symbolrate) * self.ofdmmode
         #self.ofdmguardintervallength = (1 / self.symbolrate) * self.ofdmmode * self.guardinterval
         #self.ofdmsymbollength = self.ofdmsymbollengthuseful + self.ofdmguardintervallength
-        self.ofdmmode_guardint = self.ofdmmode  * (1+self.guardinterval) 
+        self.ofdmmode_guardint = int(self.ofdmmode  * (1+self.guardinterval)) 
         self.ofdmsymbolspersecond = self.symbolrate / self.ofdmmode_guardint
         #self.ofdmframespersecond = self.ofdmsymbolspersecond / self.symbolsperframe
         self.symbolspersuperframe = self.ofdmmode_guardint * self.framespersuperframe * self.symbolsperframe
@@ -211,8 +211,9 @@ class Encoder:
         
         self.fftswaprealimagKernel = self.kernelh.load('FFT.cl','fftswaprealimag', self.compilerflags)
         
-        self.quantisationKernel = self.kernelh.load('quantisation.cl','floattoint', self.compilerflags)
-
+        #self.quantisationKernel = self.kernelh.load('quantisation.cl','floattoint', self.compilerflags)
+        self.quantisationKernel = self.kernelh.load('quantisation.cl','floattofloat', self.compilerflags)
+        
         ######################################
         # create tps arrays
 
@@ -587,6 +588,7 @@ class Encoder:
         self.np_int32_4096 = numpy.int32(4096)
         self.np_int32_ofdmmode = numpy.int32(self.ofdmmode)
         self.np_int32_modulation = numpy.int32(self.modulation)
+        self.np_int32_ofdmmode_guard_int = numpy.int32(self.ofdmmode_guardint)
         
         if self.debug :
             print "thread count"
@@ -852,22 +854,15 @@ class Encoder:
 	    eventA = cl.enqueue_copy(self.queue, self.dest_buf_J[j], self.dest_buf_I[j], byte_count=self.guard_intervalA_bytecount, src_offset=0, dest_offset=self.guard_intervalA_destoffset, wait_for=[event])
 	    eventB = cl.enqueue_copy(self.queue, self.dest_buf_J[j], self.dest_buf_I[j], byte_count=self.guard_intervalB_bytecount, src_offset=self.guard_intervalB_srcoffset ,dest_offset=0, wait_for=[event])
 	    
-	    # create the guard interval
-	    #destoffset = (self.ofdmmode * (1+self.guardinterval) * self.sizeofreal2_t) * (frame+symbol*self.framespersuperframe)
-	    #event = cl.enqueue_copy( self.queue, self.dest_buf_J, self.dest_buf_I, byte_count=int(self.sizeofreal2_t * self.ofdmmode), src_offset=0, dest_offset=int(self.ofdmmode * self.guardinterval * self.sizeofreal2_t)+destoffset, wait_for=[event])
-	    #event = cl.enqueue_copy( self.queue, self.dest_buf_J, self.dest_buf_I, byte_count=int(self.ofdmmode * self.guardinterval * self.sizeofreal2_t), src_offset=int(self.ofdmmode - self.ofdmmode * self.guardinterval) * self.sizeofreal2_t , dest_offset=destoffset, wait_for=[event])
-	
 	    # quantisationKernel: convert complex number real2_t to int2, multiplies each value with p
 	    #  threadcount: ofdm_mode * (1+self.guardinterval)
-	    #  input is ofdm_mode real2_t, output is ofdm_mode int2, const <factor to scale>, const <dest buffer offset>
-	    destoffset = self.ofdmmode_guardint * (frame+symbol*self.framespersuperframe) #* self.sizeofreal2_t
-	    #self.quantisationKernel.set_args(self.dest_buf_J, self.cl_output_buf, numpy.int32(self.ofdmmode), numpy.int32(destoffset) )
+	    #  input is ofdmmode_guardint real2_t, output is ofdmmode_guardint int2, const <factor to scale>, const <dest buffer offset>
+	    destoffset = self.ofdmmode_guardint * j
+
 	    self.quantisationKernel.set_args(self.dest_buf_J[j], dest_buf, self.np_int32_ofdmmode, numpy.int32(destoffset) )                    
-	    event = cl.enqueue_nd_range_kernel(self.queue, self.quantisationKernel,(int(self.ofdmmode * (1+self.guardinterval)),), None, wait_for=[eventA,eventB])
+	    event = cl.enqueue_nd_range_kernel(self.queue, self.quantisationKernel,(self.ofdmmode_guardint,), None, wait_for=[eventA,eventB])
 	
-	    #self.cl_thread_lock.acquire()
 	    self.symbolcounter += 2 * self.ofdmmode_guardint
-	    #self.cl_thread_lock.release()
 	    
 	    return event
 
