@@ -20,6 +20,8 @@ import os
 import string
 import numpy
 import time
+import subprocess
+
 try:
     import threading
 except ImportError, e:
@@ -262,13 +264,22 @@ class TabPanelMain(wx.Panel):
         print "outputfile %s" % self.gs.outputfile
         print "write outputfile %f" % self.gs.writeoutputfile
         print "radio freq %f" % self.gs.radiofreq
+        
         if self.gs.logofilename[0] == ".":
             self.gs.logofilename = "%s%s" % (os.getcwd(), string.lstrip(self.gs.logofilename,"."))
-        print "logo file %s" % self.gs.logofilename            
+        print "logo file %s" % self.gs.logofilename      
+        if self.gs.writeoutputfile == 0:
+            try:
+                os.mkfifo("/tmp/glfifo")
+            except:
+                print "bla"
+            self.gs.outputfile = "/tmp/glfifo"
+            self.glDrawPixel_process = subprocess.Popen(['./glDrawPixels', '-geometry', '1024x768+0+0', self.gs.outputfile])
+            
         self.gs.update_global_settings()
         self.thread_event.clear()
 
-        if self.cbtransmitlogo.GetValue() or self.gs.inputfile:
+        if (self.cbtransmitlogo.GetValue() or len(self.gs.inputfile)) and len(self.gs.outputfile):
             self.buffersize = 5
             self.cl_inputbuffer_array = [cl.Buffer(self.gs.ctx, cl.mem_flags.READ_ONLY, size=int(self.gs.dvbt_encoder.get_tspacketspersuperframe() * 188) )] * self.buffersize 
             self.cl_outputbuffer_array = [cl.Buffer(self.gs.ctx, cl.mem_flags.WRITE_ONLY, size=int(self.gs.dvbt_encoder.get_symbolspersuperframe() * 8) )] * self.buffersize 
@@ -277,15 +288,14 @@ class TabPanelMain(wx.Panel):
             self.workingthread = threading.Thread(target=self.worker_thread)            
             self.workingthread.start()
 
-            
     def OnClickButtonStop(self,event):
         self.thread_event.set()
 
     def worker_thread(self):
-        #fifo = open(inputfifo, 'w')
+        outputfifo = open(self.gs.outputfile, 'w')
 
         self.str_inputbuf= ""
-        encoded_data = numpy.array(numpy.zeros(self.gs.dvbt_encoder.get_symbolspersuperframe() * 2) ,dtype=numpy.int32)
+        encoded_data = [numpy.array(numpy.zeros(self.gs.dvbt_encoder.get_symbolspersuperframe() * 8) ,dtype=numpy.uint8)] * self.buffersize
 
         for i in range(0,self.buffersize):
             self.cl_inputevent_array[i] = self.gs.dvbt_encoder.enqueue_copy_to_device(self.get_input_buf(), self.cl_inputbuffer_array[i])
@@ -296,15 +306,20 @@ class TabPanelMain(wx.Panel):
         while not self.thread_event.isSet():
             for i in range(0,self.buffersize):
                 #self.cl_inputevent_array[i].wait()
-                #if self.cl_outputevent_array[i] is not None:
-                #    self.cl_outputevent_array[i].wait()
+                if self.cl_outputevent_array[i] is not None:
+                    self.cl_outputevent_array[i].wait()
+                    outputfifo.write(encoded_data[i])
+                    
                 t = time.time() 
                 self.gs.dvbt_encoder.encode_superframe(self.cl_inputbuffer_array[i],self.cl_outputbuffer_array[i],self.cl_inputevent_array[i])
                 print "execution time %f " % (time.time() -t)
                 #enqueue a transfer
                 self.cl_inputevent_array[i] = self.gs.dvbt_encoder.enqueue_copy_to_device(self.get_input_buf(), self.cl_inputbuffer_array[i])
-                self.cl_outputevent_array[i] = self.gs.dvbt_encoder.enqueue_copy_to_host(self.cl_outputbuffer_array[i],encoded_data )
+                self.cl_outputevent_array[i] = self.gs.dvbt_encoder.enqueue_copy_to_host(self.cl_outputbuffer_array[i],encoded_data[i] )
                 
+        self.glDrawPixel_process.terminate()
+        outputfifo.close()
+        
         #fifo.close()
         
     def get_input_buf(self):
