@@ -47,3 +47,12 @@ __kernel void floattoint(__global const real2_t * x, __global int2 * y, int p, i
   // Write output
   y[i+offset] = (int2)((int)(x[i].x*p),(int)(x[i].y*p));
 }
+
+
+__kernel void floattofloat(__global const real2_t * x, __global real2_t * y, int p, int offset)
+{
+  int i = get_global_id(0);   // thread index
+
+  // Write output
+  y[i+offset] = (real2_t)((x[i].x*p),(x[i].y*p));
+}
