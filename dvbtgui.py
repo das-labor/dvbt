@@ -210,7 +210,7 @@ class TabPanelMain(wx.Panel):
         self.Bind(wx.EVT_TEXT, self.EvtTextlogo, self.TextCtrllogofile)
         
         self.rb1 = wx.RadioButton(self, -1, 'write to file/fifo', (10, 120), style=wx.RB_GROUP)
-        self.rb2 = wx.RadioButton(self, -1, 'output using opengl', (10, 150))
+        self.rb2 = wx.RadioButton(self, -1, 'vgatoiqbaseband', (10, 150))
 
         self.Bind(wx.EVT_RADIOBUTTON, self.RadioButtonEvent, id=self.rb1.GetId())
         self.Bind(wx.EVT_RADIOBUTTON, self.RadioButtonEvent, id=self.rb2.GetId())
@@ -247,6 +247,9 @@ class TabPanelMain(wx.Panel):
         self.thread_lock = threading.Lock()
                 
     def OnClickButtonStart(self,event):
+        self.gs.outputfile = self.TextCtrloutputfile.GetValue()
+        self.gs.inputfile = self.TextCtrlinputfile.GetValue()
+        
         print "bandwidth %f" % self.gs.bandwidth
         print "coderate %f" % self.gs.coderate
         print "odfmmode %f" % self.gs.odfmmode
@@ -272,9 +275,9 @@ class TabPanelMain(wx.Panel):
             try:
                 os.mkfifo("/tmp/glfifo")
             except:
-                print "bla"
+                print "fifo exists"
             self.gs.outputfile = "/tmp/glfifo"
-            self.glDrawPixel_process = subprocess.Popen(['./glDrawPixels', '-geometry', '1024x768+0+0', self.gs.outputfile])
+            self.glDrawPixel_process = subprocess.Popen(['./vgatoiqbaseband', self.gs.outputfile, '-pclk','%d'%self.gs.bandwidth*8 ])
             
         self.gs.update_global_settings()
         self.thread_event.clear()
@@ -292,10 +295,11 @@ class TabPanelMain(wx.Panel):
         self.thread_event.set()
 
     def worker_thread(self):
+    	print "bla1"
         outputfifo = open(self.gs.outputfile, 'w')
-
+        print "bla2"
         self.str_inputbuf= ""
-        encoded_data = [numpy.array(numpy.zeros(self.gs.dvbt_encoder.get_symbolspersuperframe() * 8) ,dtype=numpy.uint8)] * self.buffersize
+        encoded_data = [numpy.array(numpy.zeros(self.gs.dvbt_encoder.get_symbolspersuperframe()) ,dtype=numpy.complex64)] * self.buffersize
 
         for i in range(0,self.buffersize):
             self.cl_inputevent_array[i] = self.gs.dvbt_encoder.enqueue_copy_to_device(self.get_input_buf(), self.cl_inputbuffer_array[i])
@@ -309,8 +313,11 @@ class TabPanelMain(wx.Panel):
                 if self.cl_outputevent_array[i] is not None:
                     self.cl_outputevent_array[i].wait()
                     outputfifo.write(encoded_data[i])
-                    
+                    for j in range(0,20):
+                        print encoded_data[i][j]
+                        
                 t = time.time() 
+                
                 self.gs.dvbt_encoder.encode_superframe(self.cl_inputbuffer_array[i],self.cl_outputbuffer_array[i],self.cl_inputevent_array[i])
                 print "execution time %f " % (time.time() -t)
                 #enqueue a transfer
