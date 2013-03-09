@@ -87,31 +87,28 @@ __kernel void run( __global const real2_t *in,  __global real2_t *out, const uin
 }
 #endif
 
-__kernel void fill_continual( __global const real2_t *in,  __global real2_t *out,  __global const uint *pilots,  __global const uint *pbrsbits)
+__kernel void fill_continual( __global real2_t *out,  __global const uint *pilots,  __global const float *pbrsbits)
 {
 	uint carrier = pilots[get_global_id(0)];
 	
 	/* continualpilot */
-	
-	out[carrier] = (real2_t)((1 - 2 * pbrsbits[carrier]) * 4.0 / 3.0 , 0);
+	out[carrier] = (real2_t)((1.0 - 2.0 * pbrsbits[carrier]) * 4.0 / 3.0 , 0.0);
 }
 
-__kernel void fill_tps( __global const real2_t *in,  __global real2_t *out,  __global const uint *pilots,  __global const uint *pbrsbits, const uint tpsbit)
+__kernel void fill_tps( __global real2_t *out,  __global const uint *pilots,  __global const float *pbrsbits, const float tpsbit)
 {
 	uint carrier = pilots[get_global_id(0)];
 
 	/* tpspilot */
-	
-	out[carrier] = (real2_t)((1 - 2 * pbrsbits[carrier]) * tpsbit, 0);
+	out[carrier] = (real2_t)((1.0 - 2.0 * pbrsbits[carrier]) * tpsbit, 0.0);
 }
 
-__kernel void fill_scattered( __global const real2_t *in,  __global real2_t *out,  __global const uint *pilots,  __global const uint *pbrsbits)
+__kernel void fill_scattered( __global real2_t *out,  __global const uint *pilots,  __global const float *pbrsbits)
 {
 	uint carrier = pilots[get_global_id(0)];
 
 	/* scatteredpilot */
-	
-	out[carrier] = (real2_t)((1 - 2 * pbrsbits[carrier]) * 4.0 / 3.0 , 0);
+	out[carrier] = (real2_t)((1.0 - 2.0 * pbrsbits[carrier]) * 4.0 / 3.0 , 0.0);
 }
 
 __kernel void fill_data( __global const real2_t *in,  __global real2_t *out,  __global const uint *pilots)

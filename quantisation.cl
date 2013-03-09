@@ -40,7 +40,7 @@ typedef float2 real2_t;
 
 #endif
 
-__kernel void floattoint(__global const real2_t * x, __global int2 * y, int p, int offset)
+__kernel void floattoint(__global const real2_t * x, __global int2 * y, const float p, const int offset)
 {
   int i = get_global_id(0);   // thread index
 
@@ -49,10 +49,20 @@ __kernel void floattoint(__global const real2_t * x, __global int2 * y, int p, i
 }
 
 
-__kernel void floattofloat(__global const real2_t * x, __global real2_t * y, int p, int offset)
+__kernel void floattofloat(__global const real2_t * x, __global real2_t * y, const float p, const int offset)
 {
   int i = get_global_id(0);   // thread index
 
   // Write output
-  y[i+offset] = (real2_t)((x[i].x*p),(x[i].y*p));
+  y[i+offset] = x[i] * p;
+}
+
+
+__kernel void floattosignedfloat(__global const real2_t * x, __global real2_t * y, const float p, const int offset)
+{
+  int i = get_global_id(0);   // thread index
+
+  // Write output
+  //AMD opencl compiler doesn't know 0.5f
+  y[i+offset] =  x[i] * p + (real2_t)((1.0f / 2.0f),(1.0f / 2.0f));
 }

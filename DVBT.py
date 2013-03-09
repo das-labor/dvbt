@@ -212,7 +212,8 @@ class Encoder:
         self.fftswaprealimagKernel = self.kernelh.load('FFT.cl','fftswaprealimag', self.compilerflags)
         
         #self.quantisationKernel = self.kernelh.load('quantisation.cl','floattoint', self.compilerflags)
-        self.quantisationKernel = self.kernelh.load('quantisation.cl','floattofloat', self.compilerflags)
+        self.quantisationKernel = self.kernelh.load('quantisation.cl','floattosignedfloat', self.compilerflags)
+        #self.quantisationKernel = self.kernelh.load('quantisation.cl','floattofloat', self.compilerflags)        
         
         ######################################
         # create tps arrays
@@ -414,9 +415,13 @@ class Encoder:
         # pilots
         
         # this pilots are constant, hardcode them
-        self.tpspilots = [34, 50, 209, 346, 413, 569, 595, 688, 790, 901, 1073, 1219, 1262, 1286, 1469, 1594, 1687, 1738, 1754, 1913, 2050, 2117, 2273, 2299, 2392, 2494, 2605, 2777, 2923, 2966, 2990, 3173, 3298, 3391, 3442, 3458, 3617, 3754, 3821, 3977, 4003, 4096, 4198, 4309, 4481, 4627, 4670, 4694, 4877, 5002, 5095, 5146, 5162, 5321, 5458, 5525, 5681, 5707, 5800, 5902, 6013, 6185, 6331, 6374, 6398, 6581, 6706, 6799]
-        self.continualpilots = [48,54,87,141,156,192,201,255,279,282,333,432,450,483,525,531,618,636,714,759,765,780,804,873,888,918,939,942,969,984,1050,1101,1107,1110,1137,1140,1146,1206,1269,1323,1377,1491,1683,1704,1752,1758,1791,1845,1860,1896,1905,1959,1983,1986,2037,2136,2154,2187,2229,2235,2322,2340,2418,2463,2469,2484,2508,2577,2592,2622,2643,2646,2673,2688,2754,2805,2811,2814,2841,2844,2850,2910,2973,3027,3081,3195,3387,3408,3456,3462,3495,3549,3564,3600,3609,3663,3687,3690,3741,3840,3858,3891,3933,3939,4026,4044,4122,4167,4173,4188,4212,4281,4296,4326,4347,4350,4377,4392,4458,4509,4515,4518,4545,4548,4554,4614,4677,4731,4785,4899,5091,5112,5160,5166,5199,5253,5268,5304,5313,5367,5391,5394,5445,5544,5562,5595,5637,5643,5730,5748,5826,5871,5877,5892,5916,5985,6000,6030,6051,6054,6081,6096,6162,6213,6219,6222,6249,6252,6258,6318,6381,6435,6489,6603,6795]
-        
+        if self.ofdmmode == 8192:
+            self.tpspilots = [34, 50, 209, 346, 413, 569, 595, 688, 790, 901, 1073, 1219, 1262, 1286, 1469, 1594, 1687, 1738, 1754, 1913, 2050, 2117, 2273, 2299, 2392, 2494, 2605, 2777, 2923, 2966, 2990, 3173, 3298, 3391, 3442, 3458, 3617, 3754, 3821, 3977, 4003, 4096, 4198, 4309, 4481, 4627, 4670, 4694, 4877, 5002, 5095, 5146, 5162, 5321, 5458, 5525, 5681, 5707, 5800, 5902, 6013, 6185, 6331, 6374, 6398, 6581, 6706, 6799]
+            self.continualpilots = [48,54,87,141,156,192,201,255,279,282,333,432,450,483,525,531,618,636,714,759,765,780,804,873,888,918,939,942,969,984,1050,1101,1107,1110,1137,1140,1146,1206,1269,1323,1377,1491,1683,1704,1752,1758,1791,1845,1860,1896,1905,1959,1983,1986,2037,2136,2154,2187,2229,2235,2322,2340,2418,2463,2469,2484,2508,2577,2592,2622,2643,2646,2673,2688,2754,2805,2811,2814,2841,2844,2850,2910,2973,3027,3081,3195,3387,3408,3456,3462,3495,3549,3564,3600,3609,3663,3687,3690,3741,3840,3858,3891,3933,3939,4026,4044,4122,4167,4173,4188,4212,4281,4296,4326,4347,4350,4377,4392,4458,4509,4515,4518,4545,4548,4554,4614,4677,4731,4785,4899,5091,5112,5160,5166,5199,5253,5268,5304,5313,5367,5391,5394,5445,5544,5562,5595,5637,5643,5730,5748,5826,5871,5877,5892,5916,5985,6000,6030,6051,6054,6081,6096,6162,6213,6219,6222,6249,6252,6258,6318,6381,6435,6489,6603,6795]
+        elif self.ofdmmode == 2048:
+            self.tpspilots = [34, 50, 209, 346, 413, 569, 595, 688, 790, 901, 1073, 1219, 1262, 1286, 1469, 1594, 1687]
+            self.continualpilots = [48,54,87,141,156,192,201,255,279,282,333,432,450,483,525,531,618,636,714,759,765,780,804,873,888,918,939,942,969,984,1050,1101,1107,1110,1137,1140,1146,1206,1269,1323,1377,1491,1683,1704]
+       
         # generate the scattered pilots sequence
         self.scatteredpilots = []
         for i in range(0,4):
@@ -557,7 +562,7 @@ class Encoder:
         cl.enqueue_copy( self.queue, self.datapilots_array[1], numpy.array(self.datapilots[1], dtype=numpy.uint32) )
         cl.enqueue_copy( self.queue, self.datapilots_array[2], numpy.array(self.datapilots[2], dtype=numpy.uint32) )
         cl.enqueue_copy( self.queue, self.datapilots_array[3], numpy.array(self.datapilots[3], dtype=numpy.uint32) )
-        cl.enqueue_copy( self.queue, self.pbrssequence_array, numpy.array(self.pbrssequence, dtype=numpy.uint32) )
+        cl.enqueue_copy( self.queue, self.pbrssequence_array, numpy.array(self.pbrssequence, dtype=numpy.float32) )
         
         self.memset(self.dest_buf_A, 0, 11*17, None).wait()
         self.memset(self.dest_buf_H_empty, 0, self.ofdmmode * self.sizeofreal2_t, None).wait()
@@ -591,7 +596,7 @@ class Encoder:
         self.np_int32_ofdmmode_guard_int = numpy.int32(self.ofdmmode_guardint)
         
         if self.debug :
-            print "thread count"
+            print "thread count:"
             print "outer coder %d " % int(self.tspacketspersuperframe)
             print "outer interleaver %d " % int(self.bytespersuperframe/4)
             print "inner coder %d " % int(self.bytespersuperframe/4)
@@ -744,11 +749,10 @@ class Encoder:
 
         self.smkernel.set_args(self.dest_buf_D, self.dest_buf_E, self.np_int32_modulation )
         evt_kernel_sm = cl.enqueue_nd_range_kernel( self.queue,self.smkernel, (int(self.bitspersuperframe/self.modulation),), None, wait_for=[evt_kernel_ii] )
-         
         for symbol in range(0, self.symbolsperframe):
             for frame in range(0, self.framespersuperframe):
                 evt_inner_loop.append(self.inner_loop(evt_kernel_sm, frame , symbol, dest_buf))
-        
+
         self.event = cl.enqueue_marker(self.queue, evt_inner_loop)
 
         return self.event
@@ -770,16 +774,16 @@ class Encoder:
 	    #  insert continual pilots, tps pilots and scattered pilots and non pilot data carriers
 	    #  input is ofdmusefulcarriers real2_t data and tps bits, output is ofdmcarriers real2_t
 		  
-	    self.fill_continual_kernel.set_args(self.dest_buf_F[j], self.dest_buf_G[j], self.continualpilots_array, self.pbrssequence_array)
-	    eventA = cl.enqueue_nd_range_kernel( self.queue, self.fill_continual_kernel, (len(self.continualpilots),), None, wait_for=[event] )
+	    self.fill_continual_kernel.set_args( self.dest_buf_G[j], self.continualpilots_array, self.pbrssequence_array)
+	    eventA = cl.enqueue_nd_range_kernel( self.queue, self.fill_continual_kernel, (len(self.continualpilots),), None, wait_for=[waitfor_event] )
 	
-	    self.fill_tps_kernel.set_args(self.dest_buf_F[j], self.dest_buf_G[j], self.tpspilots_array, self.pbrssequence_array, numpy.uint32(self.tps_bits[frame][symbol]) )
-	    eventB = cl.enqueue_nd_range_kernel( self.queue, self.fill_tps_kernel, (len(self.tpspilots),), None, wait_for=[event] )
+	    self.fill_tps_kernel.set_args( self.dest_buf_G[j], self.tpspilots_array, self.pbrssequence_array, numpy.float32(self.tps_bits[frame][symbol]) )
+	    eventB = cl.enqueue_nd_range_kernel( self.queue, self.fill_tps_kernel, (len(self.tpspilots),), None, wait_for=[waitfor_event] )
 	    
 	    index = symbol % 4
 	    
-	    self.fill_scattered_kernel.set_args(self.dest_buf_F[j], self.dest_buf_G[j], self.scatteredpilots_array[index], self.pbrssequence_array)
-	    eventC = cl.enqueue_nd_range_kernel( self.queue, self.fill_scattered_kernel, (len(self.scatteredpilots[index]),), None, wait_for=[event] )
+	    self.fill_scattered_kernel.set_args( self.dest_buf_G[j], self.scatteredpilots_array[index], self.pbrssequence_array)
+	    eventC = cl.enqueue_nd_range_kernel( self.queue, self.fill_scattered_kernel, (len(self.scatteredpilots[index]),), None, wait_for=[waitfor_event] )
 	    
 	    self.fill_data_kernel.set_args(self.dest_buf_F[j], self.dest_buf_G[j], self.datapilots_array[index])
 	    eventD = cl.enqueue_nd_range_kernel( self.queue, self.fill_data_kernel, (len(self.datapilots[index]),), None, wait_for=[event] )
@@ -789,7 +793,7 @@ class Encoder:
 	    event = cl.enqueue_copy(self.queue, self.dest_buf_H[j], self.dest_buf_H_empty, wait_for=[waitfor_event] )
 	    event = cl.enqueue_copy(self.queue, self.dest_buf_H[j], self.dest_buf_G[j], byte_count=self.fft_shift_A_bytecount, src_offset=0, dest_offset=self.fft_shift_A_destoffset, wait_for=[eventA,eventB,eventC,eventD,event])
 	    event = cl.enqueue_copy(self.queue, self.dest_buf_H[j], self.dest_buf_G[j], byte_count=self.fft_shift_B_bytecount, src_offset=self.fft_shift_B_destoffset, dest_offset=0, wait_for=[event])
-	    
+
 	    # swap real and imag part, to do an inverse transform
 	    # fftswaprealimagKernel: swap real and imag part of complex number
 	    #  threadcount: ofdmmode
@@ -859,7 +863,7 @@ class Encoder:
 	    #  input is ofdmmode_guardint real2_t, output is ofdmmode_guardint int2, const <factor to scale>, const <dest buffer offset>
 	    destoffset = self.ofdmmode_guardint * j
 
-	    self.quantisationKernel.set_args(self.dest_buf_J[j], dest_buf, self.np_int32_ofdmmode, numpy.int32(destoffset) )                    
+	    self.quantisationKernel.set_args(self.dest_buf_J[j], dest_buf, numpy.float32(self.ofdmmode*0.0025), numpy.int32(destoffset) )                    
 	    event = cl.enqueue_nd_range_kernel(self.queue, self.quantisationKernel,(self.ofdmmode_guardint,), None, wait_for=[eventA,eventB])
 	
 	    self.symbolcounter += 2 * self.ofdmmode_guardint
