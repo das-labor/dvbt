@@ -267,6 +267,7 @@ class TabPanelMain(wx.Panel):
         print "outputfile %s" % self.gs.outputfile
         print "write outputfile %f" % self.gs.writeoutputfile
         print "radio freq %f" % self.gs.radiofreq
+        print "cl_device %s" % self.gs.clcomputedevice.name
         
         if self.gs.logofilename[0] == ".":
             self.gs.logofilename = "%s%s" % (os.getcwd(), string.lstrip(self.gs.logofilename,"."))
@@ -313,8 +314,8 @@ class TabPanelMain(wx.Panel):
                 if self.cl_outputevent_array[i] is not None:
                     self.cl_outputevent_array[i].wait()
                     outputfifo.write(encoded_data[i])
-                    for j in range(0,20):
-                        print encoded_data[i][j]
+                    #for j in range(0,20):
+                    #    print encoded_data[i][j]
                         
                 t = time.time() 
                 
@@ -506,9 +507,9 @@ class TabPanelstatus(wx.Panel):
         
        
     def update(self):
-    	if self.gs.dvbt_encoder is not None:
-    	    self.gs.symbolspersecondwritten = self.gs.dvbt_encoder.get_symbolspersecondwritten()
-    	    self.gs.totalsymbolswritten = self.gs.dvbt_encoder.get_totalsymbolswritten()
+    	#if self.gs.dvbt_encoder is not None:
+    	    #self.gs.symbolspersecondwritten = self.gs.dvbt_encoder.get_symbolspersecondwritten()
+    	    #self.gs.totalsymbolswritten = self.gs.dvbt_encoder.get_totalsymbolswritten()
     	
         self.lblrate.Value = "rate: %3.1f" % (self.gs.symbolspersecondwritten / self.gs.symbolrate * 100)
         self.lblSymbolswritten.Value = "total symbols: %s" % self.toUnits(self.gs.totalsymbolswritten)
@@ -548,7 +549,7 @@ class TabPanelopenclsettings(wx.Panel):
 
         for any_platform in cl.get_platforms():
             clplatformList.append(any_platform.name)
-            
+        self.clplatform = cl.get_platforms()[0].name
         self.gs.clplatform =  cl.get_platforms()[0]
         self.gs.clcomputedevice = self.gs.clplatform.get_devices()[0]
         self.gs.ctx = cl.Context(devices=[self.gs.clcomputedevice], properties=None, dev_type=None)
@@ -593,7 +594,14 @@ class TabPanelopenclsettings(wx.Panel):
        	
     def EvtComboBoxcomputedevice(self, event):
        self.computedevice = event.GetString().split(':')[1].strip()
-
+       for any_platform in cl.get_platforms():
+       	   if any_platform.name == self.clplatform:
+               for found_device in any_platform.get_devices():
+                   if found_device.name == self.computedevice :
+                       self.gs.clcomputedevice = found_device
+                       break
+       self.gs.ctx = cl.Context(devices=[self.gs.clcomputedevice], properties=None, dev_type=None)
+       
 ########################################################################
 class Notebookdvbt(wx.Notebook):
     """
