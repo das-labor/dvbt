@@ -191,8 +191,13 @@ class Encoder:
         
         self.iikernel = self.kernelh.load('inner_interleaver.cl','run_ii_A', self.compilerflags)
         
-        self.smkernel = self.kernelh.load('signal_mapper.cl','run_A', self.compilerflags)
-        
+        if self.modulation == 2:
+            self.smkernel = self.kernelh.load('signal_mapper.cl','run_qpsk', self.compilerflags)
+        if self.modulation == 4:
+            self.smkernel = self.kernelh.load('signal_mapper.cl','run_qam16', self.compilerflags)
+        if self.modulation == 6:
+            self.smkernel = self.kernelh.load('signal_mapper.cl','run_qam64', self.compilerflags)
+            
         if self.ofdmmode == 2048:
             self.sikernel = self.kernelh.load('symbol_interleaver.cl','run2K_A', self.compilerflags)
             
@@ -211,6 +216,10 @@ class Encoder:
         
         self.fftswaprealimagKernel = self.kernelh.load('FFT.cl','fftswaprealimag', self.compilerflags)
         
+        self.fftRadix2KernelStart = self.kernelh.load('FFT.cl','fftRadix2Kernel_start', self.compilerflags)
+                
+        #self.fftRadix2KernelEnd = self.kernelh.load('FFT.cl','fftRadix2Kernel_end_guard', self.compilerflags)
+        self.fftRadix2KernelEnd = self.kernelh.load('FFT.cl','fftRadix2Kernel_end', self.compilerflags)
         #self.quantisationKernel = self.kernelh.load('quantisation.cl','floattoint', self.compilerflags)
         self.quantisationKernel = self.kernelh.load('quantisation.cl','floattosignedfloat', self.compilerflags)
         #self.quantisationKernel = self.kernelh.load('quantisation.cl','floattofloat', self.compilerflags)        
@@ -746,9 +755,10 @@ class Encoder:
         # symbolmapper:
         #  convert <modulation bits> into a complex number
         #  store as real2_t
-
-        self.smkernel.set_args(self.dest_buf_D, self.dest_buf_E, self.np_int32_modulation )
+        
+        self.smkernel.set_args(self.dest_buf_D, self.dest_buf_E )
         evt_kernel_sm = cl.enqueue_nd_range_kernel( self.queue,self.smkernel, (int(self.bitspersuperframe/self.modulation),), None, wait_for=[evt_kernel_ii] )
+        
         for frame in range(0, self.framespersuperframe):
             for symbol in range(0, self.symbolsperframe):
                 evt_inner_loop.append(self.inner_loop(evt_kernel_sm, frame , symbol, dest_buf))
@@ -799,16 +809,16 @@ class Encoder:
 	    #  threadcount: ofdmmode
 	    #  input is ofdmmode real2_t
 	    
-	    self.fftswaprealimagKernel.set_args(self.dest_buf_H[j])
-	    event = cl.enqueue_nd_range_kernel(self.queue, self.fftswaprealimagKernel, (self.ofdmmode,), None, wait_for=[event])
+	    #self.fftswaprealimagKernel.set_args(self.dest_buf_H[j])
+	    #event = cl.enqueue_nd_range_kernel(self.queue, self.fftswaprealimagKernel, (self.ofdmmode,), None, wait_for=[event])
 	    
 	    # fftRadix2Kernel: radix-2 fft
 	    #  threadcount: ofdmmode / 2
 	    #  input is ofdmmode real2_t, output is ofdmmode real2_t, const p
 	    #   for(p=1, p < ofdmmode ,p=p*2)
 	    
-	    self.fftRadix2Kernel.set_args(self.dest_buf_H[j], self.dest_buf_I[j], self.np_int32_1 )
-	    event = cl.enqueue_nd_range_kernel(self.queue,self.fftRadix2Kernel,(self.ofdmmode_half,),None, wait_for=[event])
+	    self.fftRadix2KernelStart.set_args(self.dest_buf_H[j], self.dest_buf_I[j], self.np_int32_1 )
+	    event = cl.enqueue_nd_range_kernel(self.queue,self.fftRadix2KernelStart,(self.ofdmmode_half,),None, wait_for=[event])
 	
 	    self.fftRadix2Kernel.set_args(self.dest_buf_I[j], self.dest_buf_H[j], self.np_int32_2 )
 	    event = cl.enqueue_nd_range_kernel(self.queue,self.fftRadix2Kernel,(self.ofdmmode_half,),None, wait_for=[event])
@@ -836,23 +846,29 @@ class Encoder:
 	
 	    self.fftRadix2Kernel.set_args(self.dest_buf_I[j], self.dest_buf_H[j], self.np_int32_512 )
 	    event = cl.enqueue_nd_range_kernel(self.queue,self.fftRadix2Kernel,(self.ofdmmode_half,),None, wait_for=[event])
-	
-	    self.fftRadix2Kernel.set_args(self.dest_buf_H[j], self.dest_buf_I[j], self.np_int32_1024 )
-	    event = cl.enqueue_nd_range_kernel(self.queue,self.fftRadix2Kernel,(self.ofdmmode_half,),None, wait_for=[event])
 	    
+	    if self.ofdmmode == 8192:
+	        self.fftRadix2Kernel.set_args(self.dest_buf_H[j], self.dest_buf_I[j], self.np_int32_1024 )
+	        event = cl.enqueue_nd_range_kernel(self.queue,self.fftRadix2Kernel,(self.ofdmmode_half,),None, wait_for=[event])
+	    else:
+	    	#self.fftRadix2KernelEnd.set_args(self.dest_buf_H[j], self.dest_buf_J[j], self.np_int32_1024, numpy.float32(self.guardinterval) )
+	    	self.fftRadix2KernelEnd.set_args(self.dest_buf_H[j], self.dest_buf_I[j], self.np_int32_1024 )
+	        event = cl.enqueue_nd_range_kernel(self.queue,self.fftRadix2KernelEnd,(self.ofdmmode_half,),None, wait_for=[event])	
+	        
 	    if self.ofdmmode == 8192:
 		self.fftRadix2Kernel.set_args(self.dest_buf_I[j], self.dest_buf_H[j], self.np_int32_2048 )
 		event = cl.enqueue_nd_range_kernel(self.queue,self.fftRadix2Kernel,(self.ofdmmode_half,),None, wait_for=[event])
 	
-		self.fftRadix2Kernel.set_args(self.dest_buf_H[j], self.dest_buf_I[j], self.np_int32_4096 )
-		event = cl.enqueue_nd_range_kernel(self.queue,self.fftRadix2Kernel,(self.ofdmmode_half,),None, wait_for=[event])
+		#self.fftRadix2KernelEnd.set_args(self.dest_buf_H[j], self.dest_buf_J[j], self.np_int32_4096 , numpy.float32(self.guardinterval))
+		self.fftRadix2KernelEnd.set_args(self.dest_buf_H[j], self.dest_buf_I[j], self.np_int32_4096)
+		event = cl.enqueue_nd_range_kernel(self.queue,self.fftRadix2KernelEnd,(self.ofdmmode_half,),None, wait_for=[event])
 		
 	    # swap real and imag part, to do an inverse transform
 	    # fftswaprealimagKernel: swap real and imag part of complex number
 	    #  threadcount: ofdmmode
 	    #  input is ofdmmode real2_t
-	    self.fftswaprealimagKernel.set_args(self.dest_buf_I[j])
-	    event = cl.enqueue_nd_range_kernel(self.queue, self.fftswaprealimagKernel, (self.ofdmmode,), None, wait_for=[event])
+	    #self.fftswaprealimagKernel.set_args(self.dest_buf_I[j])
+	    #event = cl.enqueue_nd_range_kernel(self.queue, self.fftswaprealimagKernel, (self.ofdmmode,), None, wait_for=[event])
 	    
 	    # create the guard interval
 	    eventA = cl.enqueue_copy(self.queue, self.dest_buf_J[j], self.dest_buf_I[j], byte_count=self.guard_intervalA_bytecount, src_offset=0, dest_offset=self.guard_intervalA_destoffset, wait_for=[event])
@@ -864,8 +880,8 @@ class Encoder:
 	    destoffset = self.ofdmmode_guardint * j
 
 	    self.quantisationKernel.set_args(self.dest_buf_J[j], dest_buf, numpy.float32(self.ofdmmode*0.0025), numpy.int32(destoffset) )                    
+	    #event = cl.enqueue_nd_range_kernel(self.queue, self.quantisationKernel,(self.ofdmmode_guardint,), None, wait_for=[event])
 	    event = cl.enqueue_nd_range_kernel(self.queue, self.quantisationKernel,(self.ofdmmode_guardint,), None, wait_for=[eventA,eventB])
-	
 	    self.symbolcounter += 2 * self.ofdmmode_guardint
 	    
 	    return event

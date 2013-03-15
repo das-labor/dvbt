@@ -15,7 +15,35 @@
 #    if not, see <http://www.gnu.org/licenses/>.
 #
 */
-	
+
+#ifndef CONFIG_USE_DOUBLE
+#define CONFIG_USE_DOUBLE 0
+#endif
+
+#if CONFIG_USE_DOUBLE
+
+#if defined(cl_khr_fp64)  // Khronos extension available?
+#pragma OPENCL EXTENSION cl_khr_fp64 : enable
+#elif defined(cl_amd_fp64)  // AMD extension available?
+#pragma OPENCL EXTENSION cl_amd_fp64 : enable
+#endif
+
+/* double */
+typedef double real_t;
+typedef double2 real2_t;
+#define FFT_PI 3.14159265358979323846
+#define FFT_SQRT_1_2 0.70710678118654752440
+
+#else
+
+/* float */
+typedef float real_t;
+typedef float2 real2_t;
+#define FFT_PI       3.14159265359f
+#define FFT_SQRT_1_2 0.707106781187f
+
+#endif
+
 __kernel void run_A( __global const uint *in, __global float2 *out, const uint md)
 {
    uint j;
@@ -53,4 +81,70 @@ __kernel void run_A( __global const uint *in, __global float2 *out, const uint m
 	out[get_global_id(0)] = tmp / sqrt( 42.0f );
         break;
     }
+}
+
+__kernel void run_qpsk( __global const uint *in, __global real2_t *out)
+{
+   uint j;
+   float x0,x1;
+   
+   x0 = (float)in[get_global_id(0) * 2];
+   x1 = (float)in[get_global_id(0) * 2 + 1];
+   
+   /* signal constellation mapping */
+   out[get_global_id(0)] = (real2_t)( (1.0f - 2.0f * x0) / sqrt( 2.0f ) , (1.0f - 2.0f * x1) / sqrt( 2.0f ) ) ;
+
+}
+
+
+__kernel void run_qam16( __global const uint *in, __global real2_t *out)
+{
+   uint j;
+   float x0,x1,x2,x3;
+   real2_t tmp;
+   
+   x0 = (float)in[get_global_id(0) * 4];
+   x1 = (float)in[get_global_id(0) * 4 + 1];
+   x2 = (float)in[get_global_id(0) * 4 + 2];
+   x3 = (float)in[get_global_id(0) * 4 + 3];   
+   
+   /* signal constellation mapping */
+   tmp.x = 3.0f - x2 * 2.0f;
+   tmp.y = 3.0f - x3 * 2.0f;
+   tmp.x *= 1.0f - x0 * 2.0f;
+   tmp.y *= 1.0f - x1 * 2.0f;
+   
+   tmp /= sqrt( 10.0f );
+   
+   out[get_global_id(0)] = tmp;
+
+}
+
+__kernel void run_qam64( __global const uint *in, __global real2_t *out)
+{
+   uint j;
+   float x0,x1,x2,x3,x4,x5;
+   real2_t tmp;
+   
+   x0 = (float)in[get_global_id(0) * 6];
+   x1 = (float)in[get_global_id(0) * 6 + 1];
+   x2 = (float)in[get_global_id(0) * 6 + 2];
+   x3 = (float)in[get_global_id(0) * 6 + 3];   
+   x4 = (float)in[get_global_id(0) * 6 + 4];
+   x5 = (float)in[get_global_id(0) * 6 + 5];  
+   
+   /* signal constellation mapping */
+   tmp.x = 3.0f -x4 * 2.0f;
+   tmp.y = 3.0f - x5 * 2.0f;
+   tmp.x *= 1.0f - x2 * 2.0f;
+   tmp.y *= 1.0f - x3 * 2.0f;
+   tmp.x += 4.0f;
+   tmp.y += 4.0f;
+   tmp.x *= 1.0f - x0 * 2.0f;
+   tmp.y *= 1.0f -x1 * 2.0f;
+   
+   tmp /= sqrt( 42.0f );
+   
+   out[get_global_id(0)] = tmp;
+
 }
