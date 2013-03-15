@@ -28,7 +28,7 @@ __kernel void run_A( __global const uint *in, __global float2 *out, const uint m
 	j = get_global_id(0) * 2;
 	tmp.x = 1.0f - 2.0f * in[j];
 	tmp.y = 1.0f - 2.0f * in[j+1];
-	out[get_global_id(0)] = tmp;
+	out[get_global_id(0)] = tmp / sqrt( 2.0f );
         break;
       case 4:
 	/* signal constellation mapping */
@@ -37,7 +37,7 @@ __kernel void run_A( __global const uint *in, __global float2 *out, const uint m
 	tmp.y = 3.0f - in[j+3] * 2.0f;
 	tmp.x *= 1.0f - in[j+0] * 2.0f;
 	tmp.y *= 1.0f - in[j+1] * 2.0f;
-	out[get_global_id(0)] = tmp;
+	out[get_global_id(0)] = tmp / sqrt( 10.0f );
         break;
       case 6:
 	/* signal constellation mapping */
@@ -50,7 +50,7 @@ __kernel void run_A( __global const uint *in, __global float2 *out, const uint m
 	tmp.y += 4.0f;
 	tmp.x *= 1.0f - in[j+0] * 2.0f;
 	tmp.y *= 1.0f - in[j+1] * 2.0f;
-	out[get_global_id(0)] = tmp;
+	out[get_global_id(0)] = tmp / sqrt( 42.0f );
         break;
     }
 }
