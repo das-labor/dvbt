@@ -749,8 +749,8 @@ class Encoder:
 
         self.smkernel.set_args(self.dest_buf_D, self.dest_buf_E, self.np_int32_modulation )
         evt_kernel_sm = cl.enqueue_nd_range_kernel( self.queue,self.smkernel, (int(self.bitspersuperframe/self.modulation),), None, wait_for=[evt_kernel_ii] )
-        for symbol in range(0, self.symbolsperframe):
-            for frame in range(0, self.framespersuperframe):
+        for frame in range(0, self.framespersuperframe):
+            for symbol in range(0, self.symbolsperframe):
                 evt_inner_loop.append(self.inner_loop(evt_kernel_sm, frame , symbol, dest_buf))
 
         self.event = cl.enqueue_marker(self.queue, evt_inner_loop)
@@ -758,7 +758,7 @@ class Encoder:
         return self.event
 
     def inner_loop(self, waitfor_event, frame , symbol, dest_buf):
-	    j = symbol + frame * self.framespersuperframe
+	    j = symbol + (frame * self.symbolsperframe)
 	    
 	    event = None
 	    # sikernel: symbol interleaver:
